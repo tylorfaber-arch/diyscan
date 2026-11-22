@@ -16,9 +16,13 @@ data class Pid(
     val imperialMin: Double = min,
     val imperialMax: Double = max,
     val toImperial: (Double) -> Double = { it },
+    /** Custom (profile) PIDs: full request hex like "221940", and optional CAN header like "7E1". */
+    val request: String? = null,
+    val header: String? = null,
     val decode: (IntArray) -> Double,
 ) {
     val hex: String get() = "%02X".format(code)
+    val isCustom: Boolean get() = request != null
 }
 
 private val cToF: (Double) -> Double = { it * 9.0 / 5.0 + 32.0 }

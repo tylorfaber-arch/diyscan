@@ -99,6 +99,10 @@ private fun App(vm: ScanViewModel) {
         if (uri != null) vm.importDrb(uri)
     }
     val pickDrb = { drbPicker.launch(arrayOf("*/*")) }
+    val profilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importProfile(uri)
+    }
+    val pickProfile = { profilePicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream")) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         hasPermission = ok
         if (ok) vm.refreshDevices()
@@ -161,7 +165,7 @@ private fun App(vm: ScanViewModel) {
                                     )
                                 }
                             }
-                            Box(Modifier.weight(1f)) { TabContent(tab, state, vm) { tab = it } }
+                            Box(Modifier.weight(1f)) { TabContent(tab, state, vm, pickProfile) { tab = it } }
                         }
                     } else {
                         Scaffold(
@@ -183,7 +187,7 @@ private fun App(vm: ScanViewModel) {
                                 }
                             },
                         ) { inner ->
-                            Box(Modifier.padding(inner)) { TabContent(tab, state, vm) { tab = it } }
+                            Box(Modifier.padding(inner)) { TabContent(tab, state, vm, pickProfile) { tab = it } }
                         }
                     }
                 }
@@ -200,12 +204,13 @@ private fun TabIcon(t: Tab, codes: Int) {
 }
 
 @Composable
-private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, go: (Tab) -> Unit) {
+private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, pickProfile: () -> Unit, go: (Tab) -> Unit) {
     when (tab) {
         Tab.OVERVIEW -> OverviewScreen(state, onRefresh = vm::refreshOverview, onGoCodes = { go(Tab.CODES) }, onGoLive = { go(Tab.LIVE) })
         Tab.LIVE -> LiveScreen(state, onStart = vm::startLive, onStop = vm::stopLive, onToggleLog = vm::toggleLogging, onTogglePid = vm::toggleDashboardPid)
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
         Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture)
-        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenDrb = { vm.openDrb(true) })
+        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenDrb = { vm.openDrb(true) },
+            onImportProfile = pickProfile, onRemoveProfile = vm::removeProfile)
     }
 }

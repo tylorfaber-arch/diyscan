@@ -31,6 +31,10 @@ class ObdService(private val elm: Elm327) {
     }
 
     suspend fun read(pid: Pid): Double? {
+        if (pid.request != null) {
+            val data = Parsing.customData(elm.request(pid.request, header = pid.header), pid.request, isCan) ?: return null
+            return pid.decode(data).takeIf { !it.isNaN() && !it.isInfinite() }
+        }
         val data = Parsing.mode01Data(elm.request("01${pid.hex}"), pid.code, pid.bytes) ?: return null
         return pid.decode(data)
     }

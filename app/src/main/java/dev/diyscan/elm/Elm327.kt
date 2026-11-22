@@ -160,11 +160,37 @@ class Elm327(private val transport: Transport) {
      * Send an OBD request (e.g. "010C") and return the response lines as hex strings.
      * Throws on adapter errors; returns empty list on NO DATA.
      */
-    suspend fun request(obd: String, timeoutMs: Long = 5_000): List<String> {
-        val lines = send(obd, timeoutMs)
+    suspend fun request(obd: String, timeoutMs: Long = 5_000, header: String? = null): List<String> {
+        val lines = lock.withLock {
+            useHeaderUnlocked(header)
+            sendUnlocked(obd, timeoutMs)
+        }
         if (lines.any { it.contains("NO DATA") }) return emptyList()
         checkErrors(lines)
         return lines
+    }
+
+    /** Header currently set with ATSH; null = the protocol's default (broadcast to all modules). */
+    private var currentHeader: String? = null
+
+    /**
+     * Address a specific module (e.g. "7E1" = transmission on most CAN vehicles), or pass null
+     * to go back to the default broadcast header. Only sends ATSH when it actually changes.
+     */
+    private suspend fun useHeaderUnlocked(header: String?) {
+        if (header == currentHeader) return
+        val h = header ?: defaultHeader() ?: return
+        sendUnlocked("ATSH$h")
+        currentHeader = header
+    }
+
+    private fun defaultHeader(): String? = when (protocol) {
+        ObdProtocol.CAN_11_500, ObdProtocol.CAN_11_250 -> "7DF"
+        ObdProtocol.CAN_29_500, ObdProtocol.CAN_29_250 -> "18DB33F1"
+        ObdProtocol.J1850_VPW, ObdProtocol.ISO_9141 -> "686AF1"
+        ObdProtocol.J1850_PWM -> "616AF1"
+        ObdProtocol.KWP_5BAUD, ObdProtocol.KWP_FAST -> "C133F1"
+        else -> null
     }
 
     private fun checkErrors(lines: List<String>) {

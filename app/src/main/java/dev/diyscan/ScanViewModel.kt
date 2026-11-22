@@ -17,6 +17,7 @@ import dev.diyscan.obd.DtcSet
 import dev.diyscan.obd.FreezeFrame
 import dev.diyscan.obd.ObdService
 import dev.diyscan.obd.Pid
+import dev.diyscan.obd.PidProfileParser
 import dev.diyscan.obd.Pids
 import dev.diyscan.obd.Readiness
 import dev.diyscan.transport.BluetoothClassicTransport
@@ -84,11 +85,15 @@ data class UiState(
     val drbCommandTotal: Int = 0,
     val drbStatus: String? = null,      // loading / error text
     val drbOpen: Boolean = false,       // browser screen showing
+    // imported PID profile (Torque-style CSV)
+    val profileName: String? = null,
+    val customPids: List<Pid> = emptyList(),
+    val profileSkipped: List<String> = emptyList(),
 ) {
     val connected get() = conn is Conn.Connected
     /** Dashboard PIDs the vehicle actually supports (all of them if we haven't asked yet). */
-    val visibleDashboard get() = if (supported.isEmpty()) dashboard else dashboard.filter { it.code in supported }
-    val availablePids get() = Pids.all.filter { supported.isEmpty() || it.code in supported }
+    val visibleDashboard get() = dashboard.filter { it.isCustom || supported.isEmpty() || it.code in supported }
+    val availablePids get() = Pids.all.filter { supported.isEmpty() || it.code in supported } + customPids
 }
 
 const val HISTORY = 120
@@ -107,7 +112,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private var drb: DrbDatabase? = null
     private val drbFile get() = File(getApplication<Application>().filesDir, "drb/database.mem")
 
-    init { loadSavedDrb() }
+    private val profileDir get() = File(getApplication<Application>().filesDir, "profile")
+
+    init { loadSavedDrb(); loadSavedProfile() }
 
     // ------------------------------------------------------------ connection
 
@@ -171,7 +178,8 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         elm = null; obd = null
         _state.update {
             UiState(devices = it.devices, imperial = it.imperial, dashboard = it.dashboard,
-                drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen)
+                drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen,
+                profileName = it.profileName, customPids = it.customPids, profileSkipped = it.profileSkipped)
         }
     }
 
@@ -421,6 +429,61 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     fun drbCommands(moduleId: Int): List<DrbCommand> = drb?.commands(moduleId).orEmpty()
     fun openDrb(open: Boolean) = _state.update { it.copy(drbOpen = open) }
+
+    // ------------------------------------------------------------ PID profiles (Torque-style CSV)
+
+    private fun loadSavedProfile() {
+        val csv = File(profileDir, "profile.csv")
+        if (!csv.exists()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = File(profileDir, "name.txt").takeIf { it.exists() }?.readText()?.trim() ?: "PID profile"
+            runCatching { PidProfileParser.parse(name, csv.readText()) }.onSuccess { applyProfile(it.name, it.pids, it.skipped) }
+        }
+    }
+
+    private fun applyProfile(name: String?, pids: List<Pid>, skipped: List<String>) = _state.update { s ->
+        // Drop old custom sensors from the dashboard — their codes are reused by the new profile.
+        s.copy(profileName = name, customPids = pids, profileSkipped = skipped,
+            dashboard = s.dashboard.filter { !it.isCustom },
+            live = s.live.filterKeys { it < PidProfileParser.CUSTOM_BASE },
+            history = s.history.filterKeys { it < PidProfileParser.CUSTOM_BASE })
+    }
+
+    fun importProfile(uri: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val text = app.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                    ?: throw java.io.IOException("Couldn't open the file")
+                val name = displayName(uri)?.substringBeforeLast('.') ?: "PID profile"
+                val p = PidProfileParser.parse(name, text)
+                if (p.pids.isEmpty()) {
+                    _state.update { it.copy(message = "No usable PIDs found. ${p.skipped.firstOrNull().orEmpty()}") }
+                    return@launch
+                }
+                profileDir.mkdirs()
+                File(profileDir, "profile.csv").writeText(text)
+                File(profileDir, "name.txt").writeText(name)
+                applyProfile(p.name, p.pids, p.skipped)
+                _state.update {
+                    it.copy(message = "Loaded ${p.pids.size} PIDs from $name" + if (p.skipped.isNotEmpty()) " (${p.skipped.size} skipped)" else "")
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "Import failed: ${e.message}") }
+            }
+        }
+    }
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        getApplication<Application>().contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull()
+
+    fun removeProfile() {
+        profileDir.deleteRecursively()
+        applyProfile(null, emptyList(), emptyList())
+        _state.update { it.copy(message = "PID profile removed.") }
+    }
 
     // ------------------------------------------------------------ logging & settings
 

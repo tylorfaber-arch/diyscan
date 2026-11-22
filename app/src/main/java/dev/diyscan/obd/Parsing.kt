@@ -32,6 +32,23 @@ object Parsing {
         return if (data.size >= bytes) data.copyOf(bytes) else null
     }
 
+    /**
+     * Reply bytes for any request (e.g. "221940" → reply "621940" + data).
+     * Returns null on no reply or a negative response (7F xx xx).
+     */
+    fun customData(lines: List<String>, request: String, isCan: Boolean): IntArray? {
+        val mode = request.take(2).toIntOrNull(16) ?: return null
+        val echo = "%02X".format(mode + 0x40) + request.drop(2).uppercase()
+        val clean = lines.map { it.uppercase().filter { c -> !c.isWhitespace() } }
+        clean.firstOrNull { it.startsWith(echo) }?.let { return hexToBytes(it.substring(echo.length)) }
+        if (isCan) {
+            val joined = joinCanFrames(clean)
+            val i = joined.indexOf(echo)
+            if (i >= 0) return hexToBytes(joined.substring(i + echo.length))
+        }
+        return null
+    }
+
     /** Mode 02 freeze frame reply: "42" + PID + frame# + data. */
     fun mode02Data(lines: List<String>, pid: Int, bytes: Int): IntArray? {
         val prefix = "42%02X00".format(pid)

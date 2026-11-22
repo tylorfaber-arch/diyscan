@@ -117,8 +117,24 @@ class SimulatorTransport : Transport {
             "0A" -> "NO DATA" // permanent codes: 2010+ only
             "04" -> { stored.clear(); pending.clear(); cleared = true; "44" }
             "09" -> if (pid == 0x02) vinLines() else "NO DATA"
+            "21", "22" -> enhanced(cmd)
             else -> "NO DATA"
         }
+    }
+
+    /**
+     * Manufacturer-style requests (mode 21/22). Any ID answers with 4 bytes that drift
+     * slowly, derived from the ID, so an imported PID profile shows moving values.
+     * Not real vehicle data.
+     */
+    private fun enhanced(cmd: String): String {
+        if (cmd.length < 4 || cmd.length % 2 != 0) return "7F" + cmd.take(2) + "12"
+        val seed = cmd.drop(2).take(6).toInt(16)
+        val t = t()
+        val wave = { k: Int -> ((sin(t / (3.0 + k) + seed * 0.37 + k) + 1) * 0.5) }
+        val bytes = (0 until 4).map { k -> (40 + wave(k) * 120).toInt().coerceIn(0, 255) }
+        val mode = cmd.take(2).toInt(16) + 0x40
+        return "%02X".format(mode) + cmd.drop(2) + bytes.joinToString("") { "%02X".format(it) }
     }
 
     private val supported = setOf(0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0B, 0x0C,

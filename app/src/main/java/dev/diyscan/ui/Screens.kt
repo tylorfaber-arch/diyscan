@@ -520,7 +520,13 @@ fun LiveScreen(
                                     checked = p in state.dashboard, onCheckedChange = { onTogglePid(p) },
                                     colors = CheckboxDefaults.colors(checkedColor = Palette.Amber, checkmarkColor = Color(0xFF1C1300)),
                                 )
-                                Text(p.name, style = MaterialTheme.typography.bodyMedium)
+                                Column {
+                                    Text(p.name, style = MaterialTheme.typography.bodyMedium)
+                                    if (p.isCustom) Text(
+                                        "${state.profileName ?: "Profile"} · ${p.request}" + (p.header?.let { " @ $it" } ?: ""),
+                                        color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             }
                         }
                     }
@@ -696,7 +702,14 @@ private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> U
 // =================================================================== SETTINGS
 
 @Composable
-fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: () -> Unit, onOpenDrb: () -> Unit = {}) {
+fun SettingsScreen(
+    state: UiState,
+    onImperial: (Boolean) -> Unit,
+    onDisconnect: () -> Unit,
+    onOpenDrb: () -> Unit = {},
+    onImportProfile: () -> Unit = {},
+    onRemoveProfile: () -> Unit = {},
+) {
     val c = state.conn as? Conn.Connected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenPad)) {
         ScreenTitle("Settings")
@@ -712,6 +725,8 @@ fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: 
                 )
             }
         }
+        Spacer(Modifier.height(12.dp))
+        ProfileCard(state, onImportProfile, onRemoveProfile)
         Spacer(Modifier.height(12.dp))
         DrbEntry(state, onOpenDrb)
         Spacer(Modifier.height(12.dp))
@@ -857,6 +872,52 @@ private fun DrbEntry(state: UiState, onOpen: () -> Unit) {
                 )
             }
             Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
+        }
+    }
+}
+
+/** Torque-style CSV PID profile: import, status, and what was skipped. */
+@Composable
+private fun ProfileCard(state: UiState, onImport: () -> Unit, onRemove: () -> Unit) {
+    var showSkipped by remember { mutableStateOf(false) }
+    Panel(Modifier.fillMaxWidth()) {
+        SectionLabel("PID profile")
+        Spacer(Modifier.height(10.dp))
+        if (state.profileName == null) {
+            Text("Add manufacturer sensors", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Import a Torque-style PID list (.csv) for your vehicle, such as GM, Ford or Toyota mode 22 PIDs from a forum. " +
+                    "The sensors show up in Live data under Choose sensors.",
+                color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(14.dp))
+            AmberButton("Import CSV", onClick = onImport)
+        } else {
+            Text(state.profileName, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${state.customPids.size} sensors" + if (state.profileSkipped.isNotEmpty()) " · ${state.profileSkipped.size} skipped" else "",
+                color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+            )
+            if (state.profileSkipped.isNotEmpty()) {
+                Text(
+                    if (showSkipped) "Hide skipped" else "Why were some skipped?",
+                    color = Palette.Amber, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp).clickable { showSkipped = !showSkipped },
+                )
+                if (showSkipped) {
+                    Spacer(Modifier.height(6.dp))
+                    state.profileSkipped.take(30).forEach {
+                        Text(it, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (state.profileSkipped.size > 30) Text("…and ${state.profileSkipped.size - 30} more", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                GhostButton("Replace", onClick = onImport)
+                GhostButton("Remove", icon = Icons.Filled.Delete, tint = Palette.Fault, onClick = onRemove)
+            }
         }
     }
 }

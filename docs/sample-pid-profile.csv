@@ -1,0 +1,6 @@
+Name,ShortName,ModeAndPID,Equation,Min Value,Max Value,Units,Header
+"DEMO Trans Fluid Temp","Trans","221940","A-40","-40","150","°C","7E1"
+"DEMO Oil Pressure","OilP","221470","A*4","0","700","kPa","7E0"
+"DEMO Fuel Rail Pressure","FRP","22115C","(A*256+B)/10","0","2000","kPa","7E0"
+"DEMO Knock Retard","Knock","2211A6","A/4","0","20","deg","7E0"
+"DEMO Unsupported Formula","Bad","221234","VAL{X}","0","1","",""
