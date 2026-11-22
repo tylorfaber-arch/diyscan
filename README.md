@@ -41,6 +41,12 @@ Parser unit tests: `gradle :app:testDebugUnitTest`
 
 Many cheap ELM327 clones only work on CAN. For pre-2008 vehicles, use an OBDLink MX+/LX or a Vgate iCar Pro.
 
+## Tooling
+
+- `tools/obd_catalog.py` — turn a raw bus capture (app Bus monitor, SavvyCAN, or candump) into a
+  request/reply catalog with the reply bytes that move. See [docs/reverse-engineering.md](docs/reverse-engineering.md).
+  Tests: `python3 -m unittest discover -s tools -p "test_*.py"`
+
 ## Roadmap
 
 - Manufacturer-specific modules (ABS, airbag, TCM) via enhanced PIDs
