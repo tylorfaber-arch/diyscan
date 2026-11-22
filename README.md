@@ -13,6 +13,7 @@ An Android OBD-II scanner app for ELM327-compatible Bluetooth adapters. It works
 - Smog readiness monitors and check engine light status
 - VIN, protocol and adapter info
 - CSV drive logging
+- **Bus monitor**: listen to all bus traffic (ATMA), grouped by message ID, with changed bytes highlighted, plus a saved capture. On pre-CAN Chryslers this is the PCI bus, the starting point for decoding manufacturer-specific messages
 - **Simulator mode**: a virtual 2005 Ram 1500 (J1850 VPW) with real-world faults, for testing without a vehicle
 
 ## Layout

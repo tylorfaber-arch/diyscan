@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -55,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diyscan.ui.CodesScreen
 import dev.diyscan.ui.ConnectScreen
 import dev.diyscan.ui.LiveScreen
+import dev.diyscan.ui.MonitorScreen
 import dev.diyscan.ui.OverviewScreen
 import dev.diyscan.ui.SettingsScreen
 import dev.diyscan.ui.theme.DiyScanTheme
@@ -75,6 +77,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     OVERVIEW("Overview", Icons.Filled.Home),
     LIVE("Live", Icons.Filled.PlayArrow),
     CODES("Codes", Icons.Filled.Warning),
+    BUS("Bus", Icons.Filled.List),
     SETTINGS("Settings", Icons.Filled.Settings),
 }
 
@@ -106,6 +109,7 @@ private fun App(vm: ScanViewModel) {
     LaunchedEffect(tab, state.connected) {
         if (tab != Tab.LIVE && state.logFile == null) vm.stopLive()
         if (tab == Tab.LIVE && state.connected) vm.startLive()
+        if (tab != Tab.BUS) vm.stopMonitor()
     }
     BackHandler(enabled = state.connected && tab != Tab.OVERVIEW) { tab = Tab.OVERVIEW }
 
@@ -187,6 +191,7 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, go: (Tab) ->
         Tab.OVERVIEW -> OverviewScreen(state, onRefresh = vm::refreshOverview, onGoCodes = { go(Tab.CODES) }, onGoLive = { go(Tab.LIVE) })
         Tab.LIVE -> LiveScreen(state, onStart = vm::startLive, onStop = vm::stopLive, onToggleLog = vm::toggleLogging, onTogglePid = vm::toggleDashboardPid)
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
+        Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture)
         Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect)
     }
 }

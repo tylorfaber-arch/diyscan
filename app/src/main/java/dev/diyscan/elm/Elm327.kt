@@ -5,7 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /** OBD protocols as reported by ATDPN. */
 enum class ObdProtocol(val code: Char, val label: String, val isCan: Boolean) {
@@ -47,7 +49,9 @@ class Elm327(private val transport: Transport) {
         private set
 
     /** Raw command → cleaned response lines. One command at a time. */
-    suspend fun send(cmd: String, timeoutMs: Long = 5_000): List<String> = lock.withLock {
+    suspend fun send(cmd: String, timeoutMs: Long = 5_000): List<String> = lock.withLock { sendUnlocked(cmd, timeoutMs) }
+
+    private suspend fun sendUnlocked(cmd: String, timeoutMs: Long = 5_000): List<String> = run {
         withContext(Dispatchers.IO) {
             drain() // drop any late bytes from a previous timed-out command
             transport.output.write("$cmd\r".toByteArray(Charsets.US_ASCII))
@@ -84,6 +88,51 @@ class Elm327(private val transport: Transport) {
     private fun drain() {
         val inp = transport.input
         while (inp.available() > 0) if (inp.read() == -1) throw ElmException("Adapter disconnected")
+    }
+
+    /**
+     * Bus monitor (ATMA): listen to every message on the bus, headers included,
+     * until the calling coroutine is cancelled. Holds the adapter the whole time,
+     * so other requests wait until monitoring stops.
+     *
+     * On a 2005 Ram this shows PCI bus (J1850 VPW) traffic between modules —
+     * the raw material for working out manufacturer-specific messages.
+     */
+    suspend fun monitor(onLine: (String) -> Unit) = lock.withLock {
+        withContext(Dispatchers.IO) {
+            sendUnlocked("ATH1") // show headers: who sent it, who it's for
+            drain()
+            transport.output.write("ATMA\r".toByteArray(Charsets.US_ASCII))
+            transport.output.flush()
+            val inp = transport.input
+            val sb = StringBuilder()
+            try {
+                while (isActive) {
+                    if (inp.available() > 0) {
+                        val b = inp.read()
+                        if (b == -1) throw ElmException("Adapter disconnected")
+                        val c = b.toChar()
+                        when {
+                            c == '\r' || c == '\n' -> {
+                                val l = sb.toString().trim(); sb.clear()
+                                if (l.isNotEmpty() && l != "ATMA") onLine(l)
+                            }
+                            c == '>' -> break // adapter stopped on its own (e.g. BUFFER FULL)
+                            b != 0 -> sb.append(c)
+                        }
+                    } else delay(3)
+                }
+            } finally {
+                withContext(NonCancellable) {
+                    runCatching {
+                        // Any character stops ATMA; adapter replies "STOPPED" then the prompt.
+                        transport.output.write("\r".toByteArray()); transport.output.flush()
+                        readUntilPrompt(2_000)
+                    }
+                    runCatching { sendUnlocked("ATH0") }
+                }
+            }
+        }
     }
 
     /**

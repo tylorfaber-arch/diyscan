@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -732,6 +733,102 @@ fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: 
             )
             Spacer(Modifier.height(8.dp))
             Text("Don't use the app while driving.", color = Palette.Warn, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Start)
+        }
+    }
+}
+
+// =================================================================== BUS MONITOR
+
+@Composable
+fun MonitorScreen(state: UiState, onStart: () -> Unit, onStop: () -> Unit, onSave: () -> Unit) {
+    var view by remember { mutableStateOf(0) }
+    val c = state.conn as? Conn.Connected
+    val now = System.currentTimeMillis()
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPad, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            ScreenTitle(
+                "Bus monitor",
+                when {
+                    state.monitorRunning -> "%.0f msgs/sec · %d total · %d IDs".format(state.busRate, state.busTotal, state.busIds.size)
+                    state.busTotal > 0 -> "Stopped · ${state.busTotal} captured"
+                    else -> c?.protocol?.label ?: "Idle"
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (state.monitorRunning) GhostButton("Stop", icon = Icons.Filled.Close, onClick = onStop)
+                else AmberButton("Start listening", icon = Icons.Filled.PlayArrow, onClick = onStart)
+                GhostButton("Save capture", icon = Icons.Filled.Done, enabled = state.busTotal > 0, onClick = onSave)
+            }
+            Spacer(Modifier.height(14.dp))
+            Segmented(listOf("By ID · ${state.busIds.size}", "Raw stream"), view) { view = it }
+            Spacer(Modifier.height(6.dp))
+        }
+
+        if (!state.monitorRunning && state.busTotal == 0) {
+            item {
+                Panel(Modifier.fillMaxWidth()) {
+                    SectionLabel("How to find a message")
+                    Spacer(Modifier.height(10.dp))
+                    listOf(
+                        "Tap Start listening and let the ID list settle for a few seconds.",
+                        "Do one thing: open a door, switch the headlights on, press the brake.",
+                        "Watch which bytes flash amber — that ID and byte carry that signal.",
+                        "Save capture to keep a timestamped record you can study later.",
+                    ).forEachIndexed { i, t ->
+                        Row(Modifier.padding(vertical = 4.dp)) {
+                            Text("${i + 1}", color = Palette.Amber, style = Numeric, modifier = Modifier.width(22.dp))
+                            Text(t, color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        if (c?.simulated == true) "Simulator traffic is made-up — it's here to try the screen, not real Chrysler messages."
+                        else "On pre-CAN Chryslers this is the PCI bus: every module, not just the engine. Generic OBD requests pause while listening.",
+                        color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        if (view == 0) {
+            items(state.busIds, key = { it.id }) { b -> BusIdRow(b, now) }
+        } else {
+            items(state.busRaw) { line ->
+                Text(
+                    line.chunked(2).joinToString(" "),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = if (line.all { it.isLetterOrDigit() }) Palette.Text else Palette.Warn,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BusIdRow(b: dev.diyscan.BusId, now: Long) {
+    Panel(Modifier.fillMaxWidth(), padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                b.id.chunked(2).joinToString(" "),
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                color = Palette.Amber, modifier = Modifier.width(96.dp),
+            )
+            FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                b.data.forEachIndexed { i, byte ->
+                    val hot = now - (b.changedAt.getOrNull(i) ?: 0L) < 1500
+                    Text(
+                        byte,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
+                        color = if (hot) Color(0xFF1C1300) else Palette.Text,
+                        modifier = Modifier.clip(RoundedCornerShape(5.dp))
+                            .background(if (hot) Palette.Amber else Palette.Track)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            Text("×${b.count}", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
         }
     }
 }

@@ -35,6 +35,7 @@ class SimulatorTransport : Transport {
 
     override val output: OutputStream = object : OutputStream() {
         override fun write(b: Int) {
+            if (monitoring) { stopMonitor(); return } // like a real ELM327: any byte stops ATMA
             val c = b.toChar()
             if (c == '\r') {
                 val cmd = lineBuf.toString().trim().uppercase().replace(" ", "")
@@ -49,7 +50,49 @@ class SimulatorTransport : Transport {
 
     // ---------------------------------------------------------------- protocol
 
+    // ---------------------------------------------------------------- bus monitor (ATMA)
+
+    @Volatile private var monitoring = false
+    private var monitorThread: Thread? = null
+
+    /**
+     * Fake PCI-bus broadcast traffic. These IDs and byte meanings are MADE UP for
+     * exercising the monitor UI — they are not real Chrysler messages.
+     */
+    private fun startMonitor() {
+        monitoring = true
+        monitorThread = Thread {
+            var n = 0
+            while (monitoring) {
+                val s = sim()
+                val t = t()
+                val doorOpen = (t % 14.0) < 3.0
+                val frames = listOf(
+                    "2A8010" + "%04X".format((s.rpm * 4).toInt()) + "%02X".format(s.speed.toInt()),
+                    "2C8011" + "%02X".format((s.coolant + 40).toInt()) + "%02X".format((s.iat + 40).toInt()),
+                    "3A8024" + (if (doorOpen) "01" else "00") + "00",
+                    "5280A0" + "%02X".format(((sin(t / 2) + 1) * 100).toInt()),
+                    "6C8028" + "%02X".format(158),
+                    "10A022" + "%06X".format(214_388 + (t / 30).toInt()),
+                )
+                val f = frames[n % frames.size]
+                n++
+                val crc = f.chunked(2).fold(0) { acc, h -> acc xor h.toInt(16) }
+                (f + "%02X".format(crc) + "\r").forEach { rx.put(it.code) }
+                Thread.sleep(if (n % frames.size == 0) 40 else 12)
+            }
+        }.apply { isDaemon = true; start() }
+    }
+
+    private fun stopMonitor() {
+        monitoring = false
+        monitorThread?.join(500)
+        monitorThread = null
+        "STOPPED\r\r>".forEach { rx.put(it.code) }
+    }
+
     private fun respond(cmd: String) {
+        if (cmd == "ATMA") { startMonitor(); return }
         val reply: String = when {
             cmd == "ATZ" -> { Thread.sleep(300); "ELM327 v1.5" }
             cmd == "ATI" -> "ELM327 v1.5 (simulator)"

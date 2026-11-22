@@ -43,6 +43,15 @@ sealed interface Conn {
 
 data class DeviceItem(val name: String, val address: String)
 
+/** One message ID seen on the bus, with when each byte last changed. */
+data class BusId(
+    val id: String,
+    val data: List<String>,      // hex bytes
+    val changedAt: List<Long>,   // per byte, ms timestamp of last change
+    val count: Int,
+    val lastMs: Long,
+)
+
 data class UiState(
     val conn: Conn = Conn.Disconnected,
     val devices: List<DeviceItem> = emptyList(),
@@ -60,6 +69,12 @@ data class UiState(
     val message: String? = null,
     val imperial: Boolean = true,
     val logFile: String? = null,
+    // bus monitor
+    val monitorRunning: Boolean = false,
+    val busIds: List<BusId> = emptyList(),
+    val busRaw: List<String> = emptyList(),   // newest first
+    val busTotal: Int = 0,
+    val busRate: Float = 0f,
 ) {
     val connected get() = conn is Conn.Connected
     /** Dashboard PIDs the vehicle actually supports (all of them if we haven't asked yet). */
@@ -78,6 +93,8 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private var obd: ObdService? = null
     private var liveJob: Job? = null
     private var log: FileWriter? = null
+    private var monitorJob: Job? = null
+    private val capture = ArrayList<String>()
 
     // ------------------------------------------------------------ connection
 
@@ -135,6 +152,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        stopMonitor()
         stopLive()
         elm?.close()
         elm = null; obd = null
@@ -237,6 +255,96 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(busy = label) }
             try { block(o) } catch (e: Exception) { _state.update { it.copy(message = friendly(e)) } }
             _state.update { it.copy(busy = null) }
+        }
+    }
+
+    // ------------------------------------------------------------ bus monitor
+
+    fun startMonitor() {
+        val e = elm ?: return
+        if (monitorJob?.isActive == true) return
+        stopLive()
+        val isCan = e.protocol.isCan
+        val ids = LinkedHashMap<String, BusId>()
+        val raw = ArrayDeque<String>()
+        val lock = Any()
+        var total = 0
+        synchronized(capture) { capture.clear() }
+        _state.update { it.copy(monitorRunning = true, busIds = emptyList(), busRaw = emptyList(), busTotal = 0, busRate = 0f) }
+
+        fun publish(rate: Float?) = synchronized(lock) {
+            val list = ids.values.sortedBy { it.id }
+            val r = raw.toList()
+            val t = total
+            _state.update { it.copy(busIds = list, busRaw = r, busTotal = t, busRate = rate ?: it.busRate) }
+        }
+
+        monitorJob = viewModelScope.launch {
+            val publisher = launch {
+                var lastTotal = 0
+                var lastMs = System.currentTimeMillis()
+                while (isActive) {
+                    delay(250)
+                    val now = System.currentTimeMillis()
+                    val t = synchronized(lock) { total }
+                    val rate = (t - lastTotal) * 1000f / (now - lastMs).coerceAtLeast(1)
+                    lastTotal = t; lastMs = now
+                    publish(rate)
+                }
+            }
+            try {
+                e.monitor { line ->
+                    val now = System.currentTimeMillis()
+                    synchronized(capture) { if (capture.size < 200_000) capture += "$now,$line" }
+                    synchronized(lock) {
+                        total++
+                        raw.addFirst(line); while (raw.size > 200) raw.removeLast()
+                        splitFrame(line, isCan)?.let { (id, bytes) ->
+                            val old = ids[id]
+                            val changed = bytes.indices.map { i ->
+                                val prev = old?.data?.getOrNull(i)
+                                if (old == null || prev == bytes[i]) old?.changedAt?.getOrNull(i) ?: 0L else now
+                            }
+                            ids[id] = BusId(id, bytes, changed, (old?.count ?: 0) + 1, now)
+                        }
+                    }
+                }
+            } catch (ex: Exception) {
+                if (ex !is kotlinx.coroutines.CancellationException) _state.update { it.copy(message = friendly(ex)) }
+            } finally {
+                publisher.cancel()
+                publish(null)
+                _state.update { it.copy(monitorRunning = false) }
+            }
+        }
+    }
+
+    fun stopMonitor() {
+        monitorJob?.cancel(); monitorJob = null
+    }
+
+    /** Header/ID + data bytes. Non-hex lines (STOPPED, BUFFER FULL…) return null. */
+    private fun splitFrame(line: String, isCan: Boolean): Pair<String, List<String>>? {
+        val l = line.replace(" ", "").uppercase()
+        if (l.length < 4 || !l.all { it in '0'..'9' || it in 'A'..'F' }) return null
+        val idLen = when {
+            !isCan -> 6                 // J1850 / ISO: 3 header bytes (priority, target, source)
+            l.length % 2 == 1 -> 3      // CAN 11-bit
+            else -> 8                   // CAN 29-bit
+        }
+        if (l.length <= idLen) return null
+        return l.take(idLen) to l.drop(idLen).chunked(2)
+    }
+
+    fun saveCapture() {
+        val lines = synchronized(capture) { capture.toList() }
+        if (lines.isEmpty()) { _state.update { it.copy(message = "Nothing captured yet.") }; return }
+        viewModelScope.launch(Dispatchers.IO) {
+            val dir = File(getApplication<Application>().getExternalFilesDir(null), "logs").apply { mkdirs() }
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val f = File(dir, "bus-$stamp.csv")
+            f.writeText("time_ms,frame\n" + lines.joinToString("\n") + "\n")
+            _state.update { it.copy(message = "Saved ${lines.size} frames: ${f.absolutePath}") }
         }
     }
 
