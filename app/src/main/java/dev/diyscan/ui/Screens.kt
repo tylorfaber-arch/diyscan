@@ -107,6 +107,7 @@ fun ConnectScreen(
     onConnect: (DeviceItem) -> Unit,
     onSimulator: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
+    onOpenDrb: () -> Unit = {},
 ) {
     Box(
         Modifier.fillMaxSize().background(
@@ -202,6 +203,8 @@ fun ConnectScreen(
                             Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
+                    DrbEntry(state, onOpenDrb)
                 }
                 Spacer(Modifier.height(32.dp))
             }
@@ -693,7 +696,7 @@ private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> U
 // =================================================================== SETTINGS
 
 @Composable
-fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: () -> Unit) {
+fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: () -> Unit, onOpenDrb: () -> Unit = {}) {
     val c = state.conn as? Conn.Connected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenPad)) {
         ScreenTitle("Settings")
@@ -709,6 +712,8 @@ fun SettingsScreen(state: UiState, onImperial: (Boolean) -> Unit, onDisconnect: 
                 )
             }
         }
+        Spacer(Modifier.height(12.dp))
+        DrbEntry(state, onOpenDrb)
         Spacer(Modifier.height(12.dp))
         if (c != null) {
             Panel(Modifier.fillMaxWidth()) {
@@ -829,6 +834,29 @@ private fun BusIdRow(b: dev.diyscan.BusId, now: Long) {
                 }
             }
             Text("×${b.count}", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+/** Entry card for the Chrysler DRB-III database browser. */
+@Composable
+private fun DrbEntry(state: UiState, onOpen: () -> Unit) {
+    Panel(Modifier.fillMaxWidth(), onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Palette.AmberGlow),
+                contentAlignment = Alignment.Center,
+            ) { Text("DRB", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Palette.Amber) }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Chrysler database", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    state.drbStatus ?: if (state.drbModules.isEmpty()) "Import your DRB-III database.mem"
+                    else "%,d modules · %,d commands".format(state.drbModules.size, state.drbCommandTotal),
+                    color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
         }
     }
 }

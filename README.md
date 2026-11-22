@@ -14,6 +14,7 @@ An Android OBD-II scanner app for ELM327-compatible Bluetooth adapters. It works
 - VIN, protocol and adapter info
 - CSV drive logging
 - **Bus monitor**: listen to all bus traffic (ATMA), grouped by message ID, with changed bytes highlighted, plus a saved capture. On pre-CAN Chryslers this is the PCI bus, the starting point for decoding manufacturer-specific messages
+- **Chrysler DRB-III database browser**: import your own `database.mem` (or a .zip containing it) to browse every module and command the dealer DRB-III tool knew, including request bytes and how replies are decoded. The database isn't included; it stays on your device. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - **Simulator mode**: a virtual 2005 Ram 1500 (J1850 VPW) with real-world faults, for testing without a vehicle
 
 ## Layout

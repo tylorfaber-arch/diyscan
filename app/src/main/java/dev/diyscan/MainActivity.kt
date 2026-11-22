@@ -55,6 +55,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diyscan.ui.CodesScreen
 import dev.diyscan.ui.ConnectScreen
+import dev.diyscan.ui.DrbBrowser
 import dev.diyscan.ui.LiveScreen
 import dev.diyscan.ui.MonitorScreen
 import dev.diyscan.ui.OverviewScreen
@@ -94,6 +95,10 @@ private fun App(vm: ScanViewModel) {
         mutableStateOf(btPermission == null ||
             ContextCompat.checkSelfPermission(ctx, btPermission) == PackageManager.PERMISSION_GRANTED)
     }
+    val drbPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importDrb(uri)
+    }
+    val pickDrb = { drbPicker.launch(arrayOf("*/*")) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         hasPermission = ok
         if (ok) vm.refreshDevices()
@@ -118,7 +123,15 @@ private fun App(vm: ScanViewModel) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
         Box(Modifier.fillMaxSize().background(Palette.Bg).padding(pad)) {
-            if (!state.connected) {
+            if (state.drbOpen) {
+                DrbBrowser(
+                    state = state,
+                    commandsFor = vm::drbCommands,
+                    onImport = pickDrb,
+                    onRemove = vm::removeDrb,
+                    onClose = { vm.openDrb(false) },
+                )
+            } else if (!state.connected) {
                 ConnectScreen(
                     state = state,
                     hasPermission = hasPermission,
@@ -127,6 +140,7 @@ private fun App(vm: ScanViewModel) {
                     onConnect = vm::connect,
                     onSimulator = { tab = Tab.OVERVIEW; vm.connectSimulator() },
                     onOpenBluetoothSettings = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
+                    onOpenDrb = { vm.openDrb(true) },
                 )
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -192,6 +206,6 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, go: (Tab) ->
         Tab.LIVE -> LiveScreen(state, onStart = vm::startLive, onStop = vm::stopLive, onToggleLog = vm::toggleLogging, onTogglePid = vm::toggleDashboardPid)
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
         Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture)
-        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect)
+        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenDrb = { vm.openDrb(true) })
     }
 }

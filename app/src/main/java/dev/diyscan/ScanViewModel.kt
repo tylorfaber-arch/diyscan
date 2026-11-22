@@ -7,6 +7,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
+import dev.diyscan.drb.DrbCommand
+import dev.diyscan.drb.DrbDatabase
+import dev.diyscan.drb.DrbModule
 import dev.diyscan.elm.Elm327
 import dev.diyscan.elm.ObdProtocol
 import dev.diyscan.obd.DtcSet
@@ -75,6 +79,11 @@ data class UiState(
     val busRaw: List<String> = emptyList(),   // newest first
     val busTotal: Int = 0,
     val busRate: Float = 0f,
+    // Chrysler DRB-III database (user-supplied)
+    val drbModules: List<DrbModule> = emptyList(),
+    val drbCommandTotal: Int = 0,
+    val drbStatus: String? = null,      // loading / error text
+    val drbOpen: Boolean = false,       // browser screen showing
 ) {
     val connected get() = conn is Conn.Connected
     /** Dashboard PIDs the vehicle actually supports (all of them if we haven't asked yet). */
@@ -95,6 +104,10 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private var log: FileWriter? = null
     private var monitorJob: Job? = null
     private val capture = ArrayList<String>()
+    private var drb: DrbDatabase? = null
+    private val drbFile get() = File(getApplication<Application>().filesDir, "drb/database.mem")
+
+    init { loadSavedDrb() }
 
     // ------------------------------------------------------------ connection
 
@@ -157,7 +170,8 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         elm?.close()
         elm = null; obd = null
         _state.update {
-            UiState(devices = it.devices, imperial = it.imperial, dashboard = it.dashboard)
+            UiState(devices = it.devices, imperial = it.imperial, dashboard = it.dashboard,
+                drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen)
         }
     }
 
@@ -347,6 +361,66 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(message = "Saved ${lines.size} frames: ${f.absolutePath}") }
         }
     }
+
+    // ------------------------------------------------------------ Chrysler DRB-III database
+
+    private fun loadSavedDrb() {
+        if (!drbFile.exists()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(drbStatus = "Loading Chrysler database…") }
+            runCatching { DrbDatabase.parse(drbFile.readBytes()) }
+                .onSuccess(::setDrb)
+                .onFailure { e -> _state.update { it.copy(drbStatus = "Saved database couldn't be read: ${e.message}") } }
+        }
+    }
+
+    private fun setDrb(db: DrbDatabase) {
+        drb = db
+        _state.update { it.copy(drbModules = db.modules, drbCommandTotal = db.commandTotal, drbStatus = null) }
+    }
+
+    /** Import a database.mem, or a .zip containing one or more (newest entry wins). Stays on the device. */
+    fun importDrb(uri: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(drbStatus = "Importing…") }
+            try {
+                val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw java.io.IOException("Couldn't open the file")
+                val mem = if (bytes.size > 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) pickFromZip(bytes) else bytes
+                val db = DrbDatabase.parse(mem) // validate before saving
+                drbFile.parentFile?.mkdirs()
+                drbFile.writeBytes(mem)
+                setDrb(db)
+                _state.update { it.copy(message = "Imported ${db.modules.size} modules, ${db.commandTotal} commands.") }
+            } catch (e: Exception) {
+                _state.update { it.copy(drbStatus = null, message = "Import failed: ${e.message}") }
+            }
+        }
+    }
+
+    private fun pickFromZip(zip: ByteArray): ByteArray {
+        var best: ByteArray? = null
+        var bestTime = Long.MIN_VALUE
+        java.util.zip.ZipInputStream(zip.inputStream()).use { z ->
+            while (true) {
+                val e = z.nextEntry ?: break
+                if (!e.isDirectory && e.name.lowercase().endsWith(".mem") && e.time >= bestTime) {
+                    best = z.readBytes(); bestTime = e.time
+                }
+            }
+        }
+        return best ?: throw java.io.IOException("No .mem file inside the zip")
+    }
+
+    fun removeDrb() {
+        drb = null
+        drbFile.delete()
+        _state.update { it.copy(drbModules = emptyList(), drbCommandTotal = 0, drbOpen = false, message = "Chrysler database removed from this device.") }
+    }
+
+    fun drbCommands(moduleId: Int): List<DrbCommand> = drb?.commands(moduleId).orEmpty()
+    fun openDrb(open: Boolean) = _state.update { it.copy(drbOpen = open) }
 
     // ------------------------------------------------------------ logging & settings
 
