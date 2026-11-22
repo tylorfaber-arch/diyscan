@@ -36,7 +36,7 @@ class ParsingTest {
     }
 
     @Test fun dtcCanMultiFrame() {
-        val lines = listOf("00A", "0:43040301030203", "1:03030304000000")
+        val lines = listOf("00A", "0:430403010302", "1:03030304000000")
         assertEquals(listOf("P0301", "P0302", "P0303", "P0304"), Parsing.dtcs(lines, 0x43, isCan = true))
     }
 
