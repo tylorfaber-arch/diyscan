@@ -3,7 +3,11 @@ pluginManagement {
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories { google(); mavenCentral() }
+    repositories {
+        google()
+        mavenCentral()
+        maven(url = "https://jitpack.io") { content { includeGroup("com.github.mik3y") } }
+    }
 }
 rootProject.name = "DiyScan"
 include(":app")

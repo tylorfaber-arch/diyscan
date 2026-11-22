@@ -108,6 +108,7 @@ fun ConnectScreen(
     onSimulator: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
     onOpenDrb: () -> Unit = {},
+    onConnectUsb: (dev.diyscan.UsbItem) -> Unit = {},
 ) {
     Box(
         Modifier.fillMaxSize().background(
@@ -148,6 +149,29 @@ fun ConnectScreen(
                 }
 
                 if (state.conn !is Conn.Connecting) {
+                    if (state.usbDevices.isNotEmpty()) {
+                        SectionLabel("USB adapters")
+                        Spacer(Modifier.height(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            state.usbDevices.forEach { u ->
+                                Panel(Modifier.fillMaxWidth(), onClick = { onConnectUsb(u) }, padding = 16.dp) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Palette.InfoBg),
+                                            contentAlignment = Alignment.Center,
+                                        ) { Text("USB", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Palette.Info) }
+                                        Spacer(Modifier.width(14.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(u.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(u.detail, style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+                                        }
+                                        Text("Connect", color = Palette.Amber, style = MaterialTheme.typography.labelLarge)
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(22.dp))
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SectionLabel("Paired adapters", Modifier.weight(1f))
                         if (hasPermission) {
@@ -170,7 +194,8 @@ fun ConnectScreen(
                             Text("No paired devices", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Plug the adapter into the port under the dash, turn the key on, then pair it in Android Bluetooth settings. The PIN is usually 1234 or 0000.",
+                                "Plug the adapter into the port under the dash, turn the key on, then pair it in Android Bluetooth settings. The PIN is usually 1234 or 0000. " +
+                                    "Using a USB adapter? Plug it in with an OTG cable and it shows up above.",
                                 color = Palette.TextMuted,
                             )
                             Spacer(Modifier.height(14.dp))

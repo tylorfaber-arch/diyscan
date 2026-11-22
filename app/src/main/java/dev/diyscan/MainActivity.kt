@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diyscan.ui.CodesScreen
 import dev.diyscan.ui.ConnectScreen
@@ -108,6 +110,9 @@ private fun App(vm: ScanViewModel) {
         if (ok) vm.refreshDevices()
     }
     LaunchedEffect(hasPermission) { if (hasPermission) vm.refreshDevices() }
+    // USB adapters need no runtime permission to list; refresh whenever the app comes back to the front
+    // (plugging one in launches/resumes the app via the USB_DEVICE_ATTACHED filter).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshUsb() }
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
@@ -140,11 +145,12 @@ private fun App(vm: ScanViewModel) {
                     state = state,
                     hasPermission = hasPermission,
                     onRequestPermission = { btPermission?.let { launcher.launch(it) } },
-                    onRefresh = vm::refreshDevices,
+                    onRefresh = { vm.refreshDevices(); vm.refreshUsb() },
                     onConnect = vm::connect,
                     onSimulator = { tab = Tab.OVERVIEW; vm.connectSimulator() },
                     onOpenBluetoothSettings = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
                     onOpenDrb = { vm.openDrb(true) },
+                    onConnectUsb = vm::connectUsb,
                 )
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {

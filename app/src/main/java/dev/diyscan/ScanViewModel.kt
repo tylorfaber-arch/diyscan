@@ -48,6 +48,9 @@ sealed interface Conn {
 
 data class DeviceItem(val name: String, val address: String)
 
+/** A USB-serial adapter plugged in via OTG. */
+data class UsbItem(val name: String, val deviceName: String, val detail: String)
+
 /** One message ID seen on the bus, with when each byte last changed. */
 data class BusId(
     val id: String,
@@ -60,6 +63,7 @@ data class BusId(
 data class UiState(
     val conn: Conn = Conn.Disconnected,
     val devices: List<DeviceItem> = emptyList(),
+    val usbDevices: List<UsbItem> = emptyList(),
     val supported: Set<Int> = emptySet(),
     val dashboard: List<Pid> = Pids.defaultDashboard,
     val live: Map<Int, Double> = emptyMap(),          // metric values
@@ -141,6 +145,64 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         start(BluetoothClassicTransport(dev), item.name, simulated = false)
     }
 
+    // ------------------------------------------------------------ USB adapters
+
+    private val usbManager get() = getApplication<Application>().getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
+
+    fun refreshUsb() {
+        val list = runCatching {
+            com.hoho.android.usbserial.driver.UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).map { d ->
+                val dev = d.device
+                val chip = d.javaClass.simpleName.removeSuffix("SerialDriver").removeSuffix("Driver")
+                UsbItem(
+                    name = runCatching { dev.productName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "USB OBD adapter",
+                    deviceName = dev.deviceName,
+                    detail = "%s · %04X:%04X".format(chip, dev.vendorId, dev.productId),
+                )
+            }
+        }.getOrDefault(emptyList())
+        _state.update { it.copy(usbDevices = list) }
+    }
+
+    fun connectUsb(item: UsbItem) {
+        val usb = usbManager
+        val driver = com.hoho.android.usbserial.driver.UsbSerialProber.getDefaultProber().findAllDrivers(usb)
+            .firstOrNull { it.device.deviceName == item.deviceName }
+        if (driver == null) {
+            _state.update { it.copy(message = "Adapter was unplugged."); }
+            refreshUsb(); return
+        }
+        viewModelScope.launch {
+            if (!usb.hasPermission(driver.device)) {
+                _state.update { it.copy(conn = Conn.Connecting("Waiting for USB permission…")) }
+                if (!requestUsbPermission(driver.device)) {
+                    _state.update { it.copy(conn = Conn.Failed("USB permission was denied. Tap the adapter again and choose Allow.")) }
+                    return@launch
+                }
+            }
+            start(dev.diyscan.transport.UsbSerialTransport(usb, driver), item.name, simulated = false)
+        }
+    }
+
+    private suspend fun requestUsbPermission(device: android.hardware.usb.UsbDevice): Boolean =
+        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            val app = getApplication<Application>()
+            val action = app.packageName + ".USB_PERMISSION"
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context, i: android.content.Intent) {
+                    runCatching { app.unregisterReceiver(this) }
+                    if (cont.isActive) cont.resumeWith(Result.success(
+                        i.getBooleanExtra(android.hardware.usb.UsbManager.EXTRA_PERMISSION_GRANTED, false)))
+                }
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                app, receiver, android.content.IntentFilter(action), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+            val flags = if (android.os.Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0
+            val pi = android.app.PendingIntent.getBroadcast(app, 0, android.content.Intent(action).setPackage(app.packageName), flags)
+            usbManager.requestPermission(device, pi)
+            cont.invokeOnCancellation { runCatching { app.unregisterReceiver(receiver) } }
+        }
+
     fun connectSimulator() = start(SimulatorTransport(), "Simulated 2005 Ram 1500", simulated = true)
 
     private fun start(t: Transport, name: String, simulated: Boolean) {
@@ -177,7 +239,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         elm?.close()
         elm = null; obd = null
         _state.update {
-            UiState(devices = it.devices, imperial = it.imperial, dashboard = it.dashboard,
+            UiState(devices = it.devices, usbDevices = it.usbDevices, imperial = it.imperial, dashboard = it.dashboard,
                 drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen,
                 profileName = it.profileName, customPids = it.customPids, profileSkipped = it.profileSkipped)
         }
@@ -189,6 +251,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         e.message?.contains("BUS INIT") == true ->
             "Bus init failed. Key ON and retry; cheap clone adapters often fail on older (J1850 / K-line) vehicles."
         e is kotlinx.coroutines.TimeoutCancellationException -> "Adapter stopped responding (timeout)."
+        e.message?.let { "USB" in it || "baud" in it } == true -> e.message!!
         e.message?.contains("read failed") == true || e is java.io.IOException ->
             "Couldn't open Bluetooth link. Make sure the adapter is plugged in and paired."
         else -> e.message ?: e.javaClass.simpleName
