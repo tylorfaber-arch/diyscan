@@ -98,6 +98,31 @@ module,request,times_asked,unique_replies,sample_reply,reply_data,moving_bytes
 `7E1` + `22 19 40` → `62 19 40 5A`: the payload is one byte, `5A`. Read it off the tool's
 screen at two different temperatures and the formula is `A-40`.
 
+## An open starting point: the OBDb
+
+You don't need a scan tool or a leaked database to start. The [OBD database](https://github.com/OBDb)
+is a community, open (CC BY-SA 4.0) collection of manufacturer-specific parameters — request
+bytes, module address, decoding — with one repository per vehicle. It has
+[Chevrolet-Cruze](https://github.com/OBDb/Chevrolet-Cruze),
+[Ford-F-150](https://github.com/OBDb/Ford-F-150) and
+[Ford-Explorer](https://github.com/OBDb/Ford-Explorer), among many others.
+
+It ships JSON; this app imports Torque CSV:
+
+```bash
+python3 tools/obdb_to_profile.py --from-github Chevrolet-Cruze -o cruze-pids.csv
+```
+
+84 of the Cruze's 108 parameters convert; the rest are listed as skipped. Most are marked
+`fcm1` in the source, which suggests their payload starts one byte later — unconfirmed, so
+they are left out rather than guessed. The others are signed values wider than one byte,
+which the formula language can't express.
+
+Some OBDb entries address modules at `241`/`7E2` rather than `7E0`; those modules may need a
+diagnostic session before they answer, and this app doesn't open one.
+
+If you publish a converted file, it inherits CC BY-SA 4.0 — keep the OBDb attribution.
+
 ## After the tool is gone
 
 `replay.txt` is the durable part. Replaying those exact requests with any adapter

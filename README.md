@@ -46,7 +46,11 @@ Many cheap ELM327 clones only work on CAN. For pre-2008 vehicles, use an OBDLink
 
 - `tools/obd_catalog.py` — turn a raw bus capture (app Bus monitor, SavvyCAN, or candump) into a
   request/reply catalog with the reply bytes that move. See [docs/reverse-engineering.md](docs/reverse-engineering.md).
-  Tests: `python3 -m unittest discover -s tools -p "test_*.py"`
+- `tools/obdb_to_profile.py` — convert an [OBDb](https://github.com/OBDb) vehicle file into the
+  Torque-style CSV the app imports. `python3 tools/obdb_to_profile.py --from-github Chevrolet-Cruze -o cruze.csv`
+- `tools/elm_sniff.py` — log an ELM327's bus traffic to CSV from a PC (standard library only)
+- `tools/test_obd_catalog.py`, `tools/test_elm_sniff.py`, `tools/test_obdb_to_profile.py` — run with
+  `python3 -m unittest discover -s tools -p "test_*.py"`
 
 ## Roadmap
 
