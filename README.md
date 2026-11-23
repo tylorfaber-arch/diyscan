@@ -1,6 +1,6 @@
 # DIY Scan
 
-An Android OBD-II scanner app for ELM327-compatible Bluetooth adapters. It works on any 1996+ vehicle, including older pre-CAN trucks on J1850 VPW/PWM, ISO 9141 and KWP2000, as well as CAN.
+A generic Android OBD-II reader for ELM327-compatible Bluetooth and USB adapters. It works on any 1996+ vehicle (J1850 VPW/PWM, ISO 9141, KWP2000 and CAN) and extends to manufacturer data through imports: PID profiles for any make, Chrysler's DRB-III database, and request replay plans.
 
 **[Download the latest APK](https://github.com/tylorfaber-arch/diyscan/releases/latest/download/diyscan.apk)** · [Project page](https://tylorfaber-arch.github.io/diyscan/)
 
@@ -17,7 +17,8 @@ An Android OBD-II scanner app for ELM327-compatible Bluetooth adapters. It works
 - **Chrysler DRB-III database browser**: import your own `database.mem` (or a .zip containing it) to browse every module and command the dealer DRB-III tool knew, including request bytes and how replies are decoded. The database isn't included; it stays on your device. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - **USB adapters** over OTG (FTDI, CH340, Prolific, CP210x chips) with baud auto-detect, as well as Bluetooth
 - **Request replay & sweep**: import the request list from a capture catalog (`tools/obd_catalog.py`) and ask the vehicle the same questions the scan tool asked, or sweep mode 22 across the engine and transmission for PIDs it never showed. Read services only: clears, routines, writes and seed/key are refused
-- **Simulator mode**: a virtual 2005 Ram 1500 (J1850 VPW) with real-world faults, for testing without a vehicle
+- **Imports**: one screen for everything you bring. Any number of Torque-style PID profiles (switch each on or off per vehicle), the Chrysler DRB-III database with favorite modules, and replay plans. All stored only on the device
+- **Demo vehicle**: a built-in simulator with a few common faults, for trying the app without an adapter
 
 ## Layout
 
@@ -30,7 +31,7 @@ app/src/main/java/dev/diyscan/
   ScanViewModel.kt   app state
 ```
 
-The ELM327 layer hides the vehicle bus, so the same code runs on a 2005 Ram (J1850 VPW) and a 2015 F-150 (CAN).
+The ELM327 layer hides the vehicle bus, so the same code runs on a 2002 pickup (J1850 VPW) and a 2018 sedan (CAN).
 
 ## Building
 

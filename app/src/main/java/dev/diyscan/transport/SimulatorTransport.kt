@@ -10,7 +10,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * A fake ELM327 plugged into a fake 2005 Dodge Ram 1500 (5.7 Hemi, J1850 VPW).
+ * A fake ELM327 plugged into a generic demo vehicle: a 2000s V8 gasoline engine on J1850 VPW
+ * (a pre-CAN bus, so the slow-bus code paths get exercised).
  * It speaks the exact same text protocol as a real adapter, so the whole app —
  * driver, parsers, UI — is exercised on the tablet without a vehicle.
  *
@@ -214,7 +215,7 @@ class SimulatorTransport : Transport {
     }
 
     private fun vinLines(): String {
-        val vin = "1D7HA18N05S000001" // made-up VIN with a Ram-style prefix
+        val vin = "1D1YSCAN000000001" // made-up demo VIN
         val bytes = listOf(0, 0, 0) + vin.map { it.code }
         return bytes.chunked(4).mapIndexed { i, c ->
             "4902%02X".format(i + 1) + c.joinToString("") { "%02X".format(it) }

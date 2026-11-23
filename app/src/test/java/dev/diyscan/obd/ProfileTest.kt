@@ -68,6 +68,16 @@ class ProfileTest {
         assertEquals("7E0", p.pids[0].header)
     }
 
+    @Test fun profilesGetSeparateCodeBlocks() {
+        val csv = "Name,ShortName,ModeAndPID,Equation\nA,A,221111,A\nB,B,222222,B\n"
+        val first = PidProfileParser.parse("Cruze", csv)
+        val second = PidProfileParser.parse("F-150", csv, PidProfileParser.CUSTOM_BASE + PidProfileParser.CODES_PER_PROFILE)
+        assertEquals(PidProfileParser.CUSTOM_BASE, first.pids[0].code)
+        assertEquals(PidProfileParser.CUSTOM_BASE + PidProfileParser.CODES_PER_PROFILE + 1, second.pids[1].code)
+        assertEquals("F-150", second.pids[0].source)
+        assertTrue(first.pids.none { p -> second.pids.any { it.code == p.code } })
+    }
+
     @Test fun customReplies() {
         assertArrayEquals(intArrayOf(0x5A), Parsing.customData(listOf("6219405A"), "221940", isCan = true))
         assertNull(Parsing.customData(listOf("7F2231"), "221940", isCan = true))

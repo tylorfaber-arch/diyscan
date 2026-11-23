@@ -28,7 +28,7 @@ object DtcDatabase {
         DtcInfo("P0122", "Throttle position sensor circuit low", M),
         DtcInfo("P0123", "Throttle position sensor circuit high", M),
         DtcInfo("P0125", "Insufficient coolant temp for closed loop", S, "Commonly a stuck-open thermostat."),
-        DtcInfo("P0128", "Coolant temperature below thermostat regulating temperature", S, "Thermostat stuck open — very common on Rams."),
+        DtcInfo("P0128", "Coolant temperature below thermostat regulating temperature", S, "Usually a thermostat stuck open."),
         DtcInfo("P0131", "O2 sensor circuit low voltage (B1S1)", M),
         DtcInfo("P0133", "O2 sensor slow response (B1S1)", M, "Aging upstream O2 sensor."),
         DtcInfo("P0135", "O2 sensor heater circuit (B1S1)", M),

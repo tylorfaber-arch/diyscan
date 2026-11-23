@@ -107,7 +107,7 @@ fun ConnectScreen(
     onConnect: (DeviceItem) -> Unit,
     onSimulator: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
-    onOpenDrb: () -> Unit = {},
+    onOpenImports: () -> Unit = {},
     onConnectUsb: (dev.diyscan.UsbItem) -> Unit = {},
 ) {
     Box(
@@ -123,7 +123,7 @@ fun ConnectScreen(
                 Spacer(Modifier.height(28.dp))
                 Logo()
                 Spacer(Modifier.height(22.dp))
-                Text("Plug in. Key on.\nSee what your truck is saying.", style = MaterialTheme.typography.headlineMedium)
+                Text("Plug in. Key on.\nSee what your vehicle is saying.", style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Works with ELM327-compatible Bluetooth adapters on any 1996+ vehicle — J1850, ISO 9141, KWP2000 and CAN.",
@@ -223,13 +223,13 @@ fun ConnectScreen(
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("Try the simulator", style = MaterialTheme.typography.titleMedium)
-                                Text("A virtual 2005 Ram 1500 with a few real-world faults.", color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium)
+                                Text("A demo vehicle with a few common faults. No adapter needed.", color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium)
                             }
                             Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    DrbEntry(state, onOpenDrb)
+                    ImportsEntry(state, onOpenImports)
                 }
                 Spacer(Modifier.height(32.dp))
             }
@@ -264,7 +264,7 @@ private fun ConnectingCard(step: String) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Older trucks (J1850 / K-line) can take 5–10 seconds to answer the first time.",
+            "Older vehicles (J1850 / K-line) can take 5–10 seconds to answer the first time.",
             color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -533,7 +533,7 @@ fun LiveScreen(
             title = { Text("Sensors to watch") },
             text = {
                 Column {
-                    Text("Fewer sensors = faster updates on older trucks.", color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                    Text("Fewer sensors = faster updates on older vehicles.", color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(8.dp))
                     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                         state.availablePids.forEach { p ->
@@ -548,7 +548,7 @@ fun LiveScreen(
                                 Column {
                                     Text(p.name, style = MaterialTheme.typography.bodyMedium)
                                     if (p.isCustom) Text(
-                                        "${state.profileName ?: "Profile"} · ${p.request}" + (p.header?.let { " @ $it" } ?: ""),
+                                        "${p.source ?: "Profile"} · ${p.request}" + (p.header?.let { " @ $it" } ?: ""),
                                         color = Palette.TextFaint, style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
@@ -662,7 +662,7 @@ fun CodesScreen(state: UiState, onRead: () -> Unit, onClear: () -> Unit) {
             text = {
                 Text(
                     "This erases stored and pending codes and freeze-frame data, and turns off the check engine light.\n\n" +
-                        "It also resets all smog readiness monitors — the truck won't pass an emissions test until it's been driven through its monitors again (often 50–100 miles).\n\n" +
+                        "It also resets all smog readiness monitors — the vehicle won't pass an emissions test until it's been driven through its monitors again (often 50–100 miles).\n\n" +
                         "If the problem isn't fixed, the code will come back.\n\nKey ON, engine OFF is best.",
                     color = Palette.TextMuted,
                 )
@@ -731,9 +731,7 @@ fun SettingsScreen(
     state: UiState,
     onImperial: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
-    onOpenDrb: () -> Unit = {},
-    onImportProfile: () -> Unit = {},
-    onRemoveProfile: () -> Unit = {},
+    onOpenImports: () -> Unit = {},
 ) {
     val c = state.conn as? Conn.Connected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenPad)) {
@@ -751,9 +749,7 @@ fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(12.dp))
-        ProfileCard(state, onImportProfile, onRemoveProfile)
-        Spacer(Modifier.height(12.dp))
-        DrbEntry(state, onOpenDrb)
+        ImportsEntry(state, onOpenImports)
         Spacer(Modifier.height(12.dp))
         if (c != null) {
             Panel(Modifier.fillMaxWidth()) {
@@ -911,71 +907,4 @@ private fun ReplayEntry(state: UiState, onOpen: () -> Unit) {
     }
 }
 
-/** Entry card for the Chrysler DRB-III database browser. */
-@Composable
-private fun DrbEntry(state: UiState, onOpen: () -> Unit) {
-    Panel(Modifier.fillMaxWidth(), onClick = onOpen) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Palette.AmberGlow),
-                contentAlignment = Alignment.Center,
-            ) { Text("DRB", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Palette.Amber) }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Chrysler database", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    state.drbStatus ?: if (state.drbModules.isEmpty()) "Import your DRB-III database.mem"
-                    else "%,d modules · %,d commands".format(state.drbModules.size, state.drbCommandTotal),
-                    color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
-        }
-    }
-}
 
-/** Torque-style CSV PID profile: import, status, and what was skipped. */
-@Composable
-private fun ProfileCard(state: UiState, onImport: () -> Unit, onRemove: () -> Unit) {
-    var showSkipped by remember { mutableStateOf(false) }
-    Panel(Modifier.fillMaxWidth()) {
-        SectionLabel("PID profile")
-        Spacer(Modifier.height(10.dp))
-        if (state.profileName == null) {
-            Text("Add manufacturer sensors", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Import a Torque-style PID list (.csv) for your vehicle, such as GM, Ford or Toyota mode 22 PIDs from a forum. " +
-                    "The sensors show up in Live data under Choose sensors.",
-                color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(14.dp))
-            AmberButton("Import CSV", onClick = onImport)
-        } else {
-            Text(state.profileName, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "${state.customPids.size} sensors" + if (state.profileSkipped.isNotEmpty()) " · ${state.profileSkipped.size} skipped" else "",
-                color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
-            )
-            if (state.profileSkipped.isNotEmpty()) {
-                Text(
-                    if (showSkipped) "Hide skipped" else "Why were some skipped?",
-                    color = Palette.Amber, style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 8.dp).clickable { showSkipped = !showSkipped },
-                )
-                if (showSkipped) {
-                    Spacer(Modifier.height(6.dp))
-                    state.profileSkipped.take(30).forEach {
-                        Text(it, color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (state.profileSkipped.size > 30) Text("…and ${state.profileSkipped.size - 30} more", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GhostButton("Replace", onClick = onImport)
-                GhostButton("Remove", icon = Icons.Filled.Delete, tint = Palette.Fault, onClick = onRemove)
-            }
-        }
-    }
-}

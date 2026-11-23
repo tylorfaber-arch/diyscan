@@ -51,6 +51,9 @@ sealed interface Conn {
 
 data class DeviceItem(val name: String, val address: String)
 
+/** One imported PID profile. */
+data class ProfileInfo(val id: String, val name: String, val pids: List<Pid>, val skipped: List<String>, val enabled: Boolean)
+
 /** A USB-serial adapter plugged in via OTG. */
 data class UsbItem(val name: String, val deviceName: String, val detail: String)
 
@@ -92,10 +95,10 @@ data class UiState(
     val drbCommandTotal: Int = 0,
     val drbStatus: String? = null,      // loading / error text
     val drbOpen: Boolean = false,       // browser screen showing
-    // imported PID profile (Torque-style CSV)
-    val profileName: String? = null,
-    val customPids: List<Pid> = emptyList(),
-    val profileSkipped: List<String> = emptyList(),
+    val drbFavorites: Set<Int> = emptySet(),
+    // imported PID profiles (Torque-style CSV), any number, each can be switched off
+    val profiles: List<ProfileInfo> = emptyList(),
+    val importsOpen: Boolean = false,
     // replay / sweep
     val replayOpen: Boolean = false,
     val replayName: String? = null,
@@ -109,6 +112,7 @@ data class UiState(
     val connected get() = conn is Conn.Connected
     /** Dashboard PIDs the vehicle actually supports (all of them if we haven't asked yet). */
     val visibleDashboard get() = dashboard.filter { it.isCustom || supported.isEmpty() || it.code in supported }
+    val customPids: List<Pid> get() = profiles.filter { it.enabled }.flatMap { it.pids }
     val availablePids get() = Pids.all.filter { supported.isEmpty() || it.code in supported } + customPids
 }
 
@@ -129,10 +133,12 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private var drb: DrbDatabase? = null
     private val drbFile get() = File(getApplication<Application>().filesDir, "drb/database.mem")
 
-    private val profileDir get() = File(getApplication<Application>().filesDir, "profile")
+    private val legacyProfileDir get() = File(getApplication<Application>().filesDir, "profile")
+    private val profilesDir get() = File(getApplication<Application>().filesDir, "profiles")
+    private val disabledFile get() = File(profilesDir, "disabled.txt")
     private val replayDir get() = File(getApplication<Application>().filesDir, "replay")
 
-    init { loadSavedDrb(); loadSavedProfile(); loadSavedReplay() }
+    init { loadSavedDrb(); viewModelScope.launch(Dispatchers.IO) { reloadProfiles() }; loadSavedReplay() }
 
     // ------------------------------------------------------------ connection
 
@@ -217,7 +223,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             cont.invokeOnCancellation { runCatching { app.unregisterReceiver(receiver) } }
         }
 
-    fun connectSimulator() = start(SimulatorTransport(), "Simulated 2005 Ram 1500", simulated = true)
+    fun connectSimulator() = start(SimulatorTransport(), "Demo vehicle", simulated = true)
 
     private fun start(t: Transport, name: String, simulated: Boolean) {
         disconnect()
@@ -254,14 +260,14 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         elm = null; obd = null
         _state.update {
             UiState(devices = it.devices, usbDevices = it.usbDevices, imperial = it.imperial, dashboard = it.dashboard,
-                drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen,
-                profileName = it.profileName, customPids = it.customPids, profileSkipped = it.profileSkipped)
+                drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen, drbFavorites = it.drbFavorites,
+                profiles = it.profiles, importsOpen = it.importsOpen)
         }
     }
 
     private fun friendly(e: Exception): String = when {
         e.message?.contains("UNABLE TO CONNECT") == true ->
-            "Adapter is fine but the truck didn't answer. Is the key ON (engine off or running)?"
+            "Adapter is fine but the vehicle didn't answer. Is the key ON (engine off or running)?"
         e.message?.contains("BUS INIT") == true ->
             "Bus init failed. Key ON and retry; cheap clone adapters often fail on older (J1850 / K-line) vehicles."
         e is kotlinx.coroutines.TimeoutCancellationException -> "Adapter stopped responding (timeout)."
@@ -461,7 +467,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun setDrb(db: DrbDatabase) {
         drb = db
-        _state.update { it.copy(drbModules = db.modules, drbCommandTotal = db.commandTotal, drbStatus = null) }
+        _state.update { it.copy(drbModules = db.modules, drbCommandTotal = db.commandTotal, drbStatus = null, drbFavorites = loadDrbFavorites()) }
     }
 
     /** Import a database.mem, or a .zip containing one or more (newest entry wins). Stays on the device. */
@@ -505,25 +511,56 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun drbCommands(moduleId: Int): List<DrbCommand> = drb?.commands(moduleId).orEmpty()
+
+    private val drbFavFile get() = File(getApplication<Application>().filesDir, "drb/favorites.txt")
+
+    private fun loadDrbFavorites() = runCatching {
+        drbFavFile.readLines().mapNotNull { it.trim().toIntOrNull() }.toSet()
+    }.getOrDefault(emptySet())
+
+    /** Star a module so it shows under Favorites — e.g. the modules on your own vehicle. */
+    fun toggleDrbFavorite(id: Int) {
+        val now = state.value.drbFavorites.let { if (id in it) it - id else it + id }
+        _state.update { it.copy(drbFavorites = now) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { drbFavFile.parentFile?.mkdirs(); drbFavFile.writeText(now.joinToString("\n")) }
+        }
+    }
     fun openDrb(open: Boolean) = _state.update { it.copy(drbOpen = open) }
 
     // ------------------------------------------------------------ PID profiles (Torque-style CSV)
 
-    private fun loadSavedProfile() {
-        val csv = File(profileDir, "profile.csv")
-        if (!csv.exists()) return
-        viewModelScope.launch(Dispatchers.IO) {
-            val name = File(profileDir, "name.txt").takeIf { it.exists() }?.readText()?.trim() ?: "PID profile"
-            runCatching { PidProfileParser.parse(name, csv.readText()) }.onSuccess { applyProfile(it.name, it.pids, it.skipped) }
+    /** Re-read every saved profile. Each gets its own code block so several can be active together. */
+    private fun reloadProfiles() {
+        // One-time move from the single-profile layout.
+        File(legacyProfileDir, "profile.csv").takeIf { it.exists() }?.let { old ->
+            profilesDir.mkdirs()
+            val name = File(legacyProfileDir, "name.txt").takeIf { it.exists() }?.readText()?.trim() ?: "PID profile"
+            val id = "p" + System.currentTimeMillis()
+            old.copyTo(File(profilesDir, "$id.csv"), overwrite = true)
+            File(profilesDir, "$id.name").writeText(name)
+            legacyProfileDir.deleteRecursively()
         }
-    }
-
-    private fun applyProfile(name: String?, pids: List<Pid>, skipped: List<String>) = _state.update { s ->
-        // Drop old custom sensors from the dashboard — their codes are reused by the new profile.
-        s.copy(profileName = name, customPids = pids, profileSkipped = skipped,
-            dashboard = s.dashboard.filter { !it.isCustom },
-            live = s.live.filterKeys { it < PidProfileParser.CUSTOM_BASE },
-            history = s.history.filterKeys { it < PidProfileParser.CUSTOM_BASE })
+        val disabled = disabledFile.takeIf { it.exists() }?.readLines()?.map { it.trim() }?.toSet().orEmpty()
+        val files = profilesDir.listFiles { f -> f.extension == "csv" }.orEmpty().sortedBy { it.name }
+        val infos = files.mapIndexedNotNull { i, f ->
+            val id = f.nameWithoutExtension
+            val name = File(profilesDir, "$id.name").takeIf { it.exists() }?.readText()?.trim() ?: id
+            runCatching {
+                PidProfileParser.parse(name, f.readText(), PidProfileParser.CUSTOM_BASE + i * PidProfileParser.CODES_PER_PROFILE)
+            }.getOrNull()?.let { ProfileInfo(id, name, it.pids, it.skipped, id !in disabled) }
+        }
+        _state.update { s ->
+            val newCustom = infos.filter { it.enabled }.flatMap { it.pids }
+            // Keep dashboard picks that still exist (matched by what they ask for, since codes may shift).
+            val dash = s.dashboard.mapNotNull { p ->
+                if (!p.isCustom) p
+                else newCustom.firstOrNull { it.source == p.source && it.request == p.request && it.header == p.header && it.name == p.name }
+            }
+            s.copy(profiles = infos, dashboard = dash,
+                live = s.live.filterKeys { it < PidProfileParser.CUSTOM_BASE },
+                history = s.history.filterKeys { it < PidProfileParser.CUSTOM_BASE })
+        }
     }
 
     fun importProfile(uri: Uri) {
@@ -538,12 +575,13 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update { it.copy(message = "No usable PIDs found. ${p.skipped.firstOrNull().orEmpty()}") }
                     return@launch
                 }
-                profileDir.mkdirs()
-                File(profileDir, "profile.csv").writeText(text)
-                File(profileDir, "name.txt").writeText(name)
-                applyProfile(p.name, p.pids, p.skipped)
+                profilesDir.mkdirs()
+                val id = "p" + System.currentTimeMillis()
+                File(profilesDir, "$id.csv").writeText(text)
+                File(profilesDir, "$id.name").writeText(name)
+                reloadProfiles()
                 _state.update {
-                    it.copy(message = "Loaded ${p.pids.size} PIDs from $name" + if (p.skipped.isNotEmpty()) " (${p.skipped.size} skipped)" else "")
+                    it.copy(message = "Added $name: ${p.pids.size} PIDs" + if (p.skipped.isNotEmpty()) " (${p.skipped.size} skipped)" else "")
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(message = "Import failed: ${e.message}") }
@@ -551,16 +589,29 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setProfileEnabled(id: String, on: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        profilesDir.mkdirs()
+        val disabled = disabledFile.takeIf { it.exists() }?.readLines()?.map { it.trim() }?.toMutableSet() ?: mutableSetOf()
+        if (on) disabled -= id else disabled += id
+        disabledFile.writeText(disabled.joinToString("\n"))
+        reloadProfiles()
+    }
+
+    fun removeProfile(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        val name = state.value.profiles.firstOrNull { it.id == id }?.name ?: "Profile"
+        File(profilesDir, "$id.csv").delete()
+        File(profilesDir, "$id.name").delete()
+        reloadProfiles()
+        _state.update { it.copy(message = "$name removed.") }
+    }
+
+    fun openImports(open: Boolean) = _state.update { it.copy(importsOpen = open) }
+
     private fun displayName(uri: Uri): String? = runCatching {
         getApplication<Application>().contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     }.getOrNull()
 
-    fun removeProfile() {
-        profileDir.deleteRecursively()
-        applyProfile(null, emptyList(), emptyList())
-        _state.update { it.copy(message = "PID profile removed.") }
-    }
 
     // ------------------------------------------------------------ replay & sweep
 

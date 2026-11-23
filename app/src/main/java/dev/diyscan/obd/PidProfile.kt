@@ -15,8 +15,10 @@ data class PidProfile(val name: String, val pids: List<Pid>, val skipped: List<S
 object PidProfileParser {
 
     const val CUSTOM_BASE = 0x10000
+    /** Each imported profile gets its own block of codes, so several can be loaded at once. */
+    const val CODES_PER_PROFILE = 0x1000
 
-    fun parse(name: String, text: String): PidProfile {
+    fun parse(name: String, text: String, codeBase: Int = CUSTOM_BASE): PidProfile {
         val rows = csvRows(text).filter { r -> r.any { it.isNotBlank() } && !r[0].trimStart().startsWith("#") && !r[0].trimStart().startsWith("//") }
         if (rows.isEmpty()) return PidProfile(name, emptyList(), listOf("File is empty"))
 
@@ -32,6 +34,7 @@ object PidProfileParser {
         val pids = mutableListOf<Pid>()
         val skipped = mutableListOf<String>()
         for (r in if (hasHeader) rows.drop(1) else rows) {
+            if (pids.size >= CODES_PER_PROFILE) { skipped += "Profile has more than $CODES_PER_PROFILE PIDs; the rest were ignored"; break }
             fun get(i: Int) = if (i >= 0) r.getOrNull(i)?.trim().orEmpty() else ""
             val label = get(iName).ifBlank { get(iPid) }
             val req = get(iPid).uppercase().removePrefix("0X").filter { !it.isWhitespace() }
@@ -46,13 +49,13 @@ object PidProfileParser {
             var max = get(iMax).toDoubleOrNull() ?: 100.0
             if (max <= min) { min = 0.0; max = 100.0 }
             pids += Pid(
-                code = CUSTOM_BASE + pids.size,
+                code = codeBase + pids.size,
                 name = label,
                 shortName = get(iShort).ifBlank { label.take(14) },
                 unit = get(iUnit),
                 bytes = eq.bytesNeeded.coerceAtLeast(1),
                 min = min, max = max,
-                request = req, header = hdr,
+                request = req, header = hdr, source = name,
             ) { bytes -> eq.eval(bytes) }
         }
         return PidProfile(name, pids, skipped)

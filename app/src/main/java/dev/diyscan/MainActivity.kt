@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diyscan.ui.CodesScreen
 import dev.diyscan.ui.ConnectScreen
 import dev.diyscan.ui.DrbBrowser
+import dev.diyscan.ui.ImportsScreen
 import dev.diyscan.ui.LiveScreen
 import dev.diyscan.ui.MonitorScreen
 import dev.diyscan.ui.OverviewScreen
@@ -145,6 +146,7 @@ private fun App(vm: ScanViewModel) {
                     onImport = pickDrb,
                     onRemove = vm::removeDrb,
                     onClose = { vm.openDrb(false) },
+                    onToggleFavorite = vm::toggleDrbFavorite,
                 )
             } else if (state.replayOpen) {
                 ReplayScreen(
@@ -157,6 +159,17 @@ private fun App(vm: ScanViewModel) {
                     onStop = vm::stopReplay,
                     onSave = vm::saveReplayResults,
                 )
+            } else if (state.importsOpen) {
+                ImportsScreen(
+                    state = state,
+                    onClose = { vm.openImports(false) },
+                    onAddProfile = pickProfile,
+                    onToggleProfile = { id, on -> vm.setProfileEnabled(id, on) },
+                    onRemoveProfile = { id -> vm.removeProfile(id) },
+                    onOpenDrb = { vm.openDrb(true) },
+                    onImportReplay = pickReplay,
+                    onOpenReplay = { vm.openReplay(true) },
+                )
             } else if (!state.connected) {
                 ConnectScreen(
                     state = state,
@@ -166,7 +179,7 @@ private fun App(vm: ScanViewModel) {
                     onConnect = vm::connect,
                     onSimulator = { tab = Tab.OVERVIEW; vm.connectSimulator() },
                     onOpenBluetoothSettings = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
-                    onOpenDrb = { vm.openDrb(true) },
+                    onOpenImports = { vm.openImports(true) },
                     onConnectUsb = vm::connectUsb,
                 )
             } else {
@@ -234,7 +247,6 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, pickProfile:
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
         Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture,
             onOpenReplay = { vm.openReplay(true) })
-        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenDrb = { vm.openDrb(true) },
-            onImportProfile = pickProfile, onRemoveProfile = vm::removeProfile)
+        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenImports = { vm.openImports(true) })
     }
 }

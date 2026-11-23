@@ -19,6 +19,8 @@ data class Pid(
     /** Custom (profile) PIDs: full request hex like "221940", and optional CAN header like "7E1". */
     val request: String? = null,
     val header: String? = null,
+    /** Name of the imported profile this PID came from. */
+    val source: String? = null,
     val decode: (IntArray) -> Double,
 ) {
     val hex: String get() = "%02X".format(code)
@@ -70,6 +72,6 @@ object Pids {
     )
     val byCode: Map<Int, Pid> = all.associateBy { it.code }
 
-    /** Sensible default dashboard for a gas truck. */
+    /** Sensible default dashboard for a gasoline vehicle. */
     val defaultDashboard = listOf(RPM, SPEED, COOLANT, ENGINE_LOAD, THROTTLE, TIMING, LTFT_B1, LTFT_B2)
 }

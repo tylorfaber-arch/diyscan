@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,10 +52,7 @@ import dev.diyscan.drb.DrbModule
 import dev.diyscan.drb.DrbProtocol
 import dev.diyscan.ui.theme.Palette
 
-/** Modules likely on a 2005 Ram 1500 (DR). Both engine computers are listed until the truck says which it has. */
-private val ramDr = Regex("""NGC|(^|\W)DR(\W|$)|3\.7 & 4\.7|45RFE|42RLE""", RegexOption.IGNORE_CASE)
-
-private enum class ModFilter(val label: String) { RAM("2005 Ram 1500"), PCI("PCI bus"), ALL("All") }
+private enum class ModFilter(val label: String) { FAV("★ Favorites"), PCI("PCI bus"), ALL("All") }
 
 @Composable
 fun DrbBrowser(
@@ -63,6 +61,7 @@ fun DrbBrowser(
     onImport: () -> Unit,
     onRemove: () -> Unit,
     onClose: () -> Unit,
+    onToggleFavorite: (Int) -> Unit = {},
 ) {
     var selectedId by rememberSaveable { mutableStateOf<Int?>(null) }
     val selected = state.drbModules.firstOrNull { it.id == selectedId }
@@ -85,7 +84,8 @@ fun DrbBrowser(
         when {
             state.drbModules.isEmpty() -> DrbEmpty(state.drbStatus, onImport)
             selected != null -> ModuleDetail(selected, commandsFor)
-            else -> ModuleList(state.drbModules, onSelect = { selectedId = it.id }, onImport = onImport, onRemove = onRemove)
+            else -> ModuleList(state.drbModules, state.drbFavorites, onSelect = { selectedId = it.id }, onToggleFavorite = onToggleFavorite,
+                onImport = onImport, onRemove = onRemove)
         }
     }
 }
@@ -136,14 +136,21 @@ private fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ModuleList(modules: List<DrbModule>, onSelect: (DrbModule) -> Unit, onImport: () -> Unit, onRemove: () -> Unit) {
+private fun ModuleList(
+    modules: List<DrbModule>,
+    favorites: Set<Int>,
+    onSelect: (DrbModule) -> Unit,
+    onToggleFavorite: (Int) -> Unit,
+    onImport: () -> Unit,
+    onRemove: () -> Unit,
+) {
     var q by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableStateOf(ModFilter.RAM) }
-    val shown = remember(modules, q, filter) {
+    var filter by rememberSaveable { mutableStateOf(if (favorites.isEmpty()) ModFilter.ALL else ModFilter.FAV) }
+    val shown = remember(modules, q, filter, favorites) {
         modules.filter { m ->
             (q.isBlank() || m.name.contains(q, true) || m.category.contains(q, true)) &&
                 when (filter) {
-                    ModFilter.RAM -> ramDr.containsMatchIn(m.name)
+                    ModFilter.FAV -> m.id in favorites
                     ModFilter.PCI -> DrbProtocol.J1850 in m.protocols || DrbProtocol.J2190 in m.protocols
                     ModFilter.ALL -> true
                 }
@@ -156,16 +163,16 @@ private fun ModuleList(modules: List<DrbModule>, onSelect: (DrbModule) -> Unit, 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ModFilter.entries.forEach { f -> Chip(f.label, filter == f) { filter = f } }
             }
-            if (filter == ModFilter.RAM) {
+            if (filter == ModFilter.FAV && favorites.isEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Your 4.7 likely uses PCM NGC; older 4.7s used JTEC+. Only the right one will answer on the truck.",
+                    "Tap the ★ on a module to keep it here, for example the engine, transmission and body modules on your vehicle.",
                     color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall,
                 )
             }
             Spacer(Modifier.height(4.dp))
         }
-        if (shown.isEmpty()) item { Text("No modules match.", color = Palette.TextMuted, modifier = Modifier.padding(8.dp)) }
+        if (shown.isEmpty() && !(filter == ModFilter.FAV && favorites.isEmpty())) item { Text("No modules match.", color = Palette.TextMuted, modifier = Modifier.padding(8.dp)) }
         items(shown, key = { it.id }) { m ->
             Panel(Modifier.fillMaxWidth(), onClick = { onSelect(m) }, padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -177,6 +184,9 @@ private fun ModuleList(modules: List<DrbModule>, onSelect: (DrbModule) -> Unit, 
                             color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                    Icon(Icons.Filled.Star, if (m.id in favorites) "Unfavorite" else "Favorite",
+                        tint = if (m.id in favorites) Palette.Amber else Palette.TextFaint,
+                        modifier = Modifier.clip(CircleShape).clickable { onToggleFavorite(m.id) }.padding(8.dp))
                     Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
                 }
             }
@@ -203,7 +213,7 @@ private fun ModuleDetail(m: DrbModule, commandsFor: (Int) -> List<DrbCommand>) {
             SearchField(q, { q = it }, "Search ${all.size} commands (O2, RPM, MISFIRE…)")
             Spacer(Modifier.height(8.dp))
             Text(
-                "Reference only — nothing here is sent to the truck yet. Some entries are actuator tests or module routines, not just reads.",
+                "Reference only — nothing here is sent to the vehicle yet. Some entries are actuator tests or module routines, not just reads.",
                 color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(6.dp))

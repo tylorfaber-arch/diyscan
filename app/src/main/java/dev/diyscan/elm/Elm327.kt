@@ -95,7 +95,8 @@ class Elm327(private val transport: Transport) {
      * until the calling coroutine is cancelled. Holds the adapter the whole time,
      * so other requests wait until monitoring stops.
      *
-     * On a 2005 Ram this shows PCI bus (J1850 VPW) traffic between modules —
+     * On a pre-CAN Chrysler this shows PCI bus (J1850 VPW) traffic between modules;
+     * on CAN vehicles, every frame on the diagnostic bus —
      * the raw material for working out manufacturer-specific messages.
      */
     suspend fun monitor(onLine: (String) -> Unit) = lock.withLock {
@@ -137,8 +138,8 @@ class Elm327(private val transport: Transport) {
 
     /**
      * Standard init. Spaces off and headers off keep parsing simple.
-     * ATSP0 lets the adapter auto-detect the bus — your 2005 Ram will come back as
-     * J1850 VPW, a 2008+ vehicle as CAN, with no code changes.
+     * ATSP0 lets the adapter auto-detect the bus (J1850, ISO 9141, KWP or CAN)
+     * with no code changes.
      */
     suspend fun initialize() {
         send("ATZ", timeoutMs = 8_000)    // reset
