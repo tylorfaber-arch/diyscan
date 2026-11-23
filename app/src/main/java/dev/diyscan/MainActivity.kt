@@ -146,6 +146,7 @@ private fun App(vm: ScanViewModel) {
     }
 
     var tab by rememberSaveable { mutableStateOf(Tab.OVERVIEW) }
+    val darkNow = isDarkTheme(state.themeMode)
     // Leaving the live tab pauses polling so other requests aren't starved on slow buses.
     LaunchedEffect(tab, state.connected) {
         if (tab != Tab.LIVE && state.logFile == null) vm.stopLive()
@@ -213,8 +214,8 @@ private fun App(vm: ScanViewModel) {
                     onOpenBluetoothSettings = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
                     onOpenImports = { vm.openImports(true) },
                     onConnectUsb = vm::connectUsb,
-                    darkTheme = isDarkTheme(state.themeMode),
-                    onToggleTheme = { vm.setThemeMode(if (isDarkTheme(state.themeMode)) ThemeMode.LIGHT else ThemeMode.DARK) },
+                    darkTheme = darkNow,
+                    onToggleTheme = { vm.setThemeMode(if (darkNow) ThemeMode.LIGHT else ThemeMode.DARK) },
                 )
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
