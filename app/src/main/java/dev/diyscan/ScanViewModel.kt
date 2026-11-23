@@ -20,6 +20,9 @@ import dev.diyscan.obd.Pid
 import dev.diyscan.obd.PidProfileParser
 import dev.diyscan.obd.Pids
 import dev.diyscan.obd.Readiness
+import dev.diyscan.obd.Replay
+import dev.diyscan.obd.ReplayRequest
+import dev.diyscan.obd.ReplayResult
 import dev.diyscan.transport.BluetoothClassicTransport
 import dev.diyscan.transport.SimulatorTransport
 import dev.diyscan.transport.Transport
@@ -93,6 +96,15 @@ data class UiState(
     val profileName: String? = null,
     val customPids: List<Pid> = emptyList(),
     val profileSkipped: List<String> = emptyList(),
+    // replay / sweep
+    val replayOpen: Boolean = false,
+    val replayName: String? = null,
+    val replayPlan: List<ReplayRequest> = emptyList(),
+    val replayResults: List<ReplayResult> = emptyList(),
+    val replayRunning: Boolean = false,
+    val replayDone: Int = 0,
+    val replayTotal: Int = 0,
+    val replayStatus: String? = null,
 ) {
     val connected get() = conn is Conn.Connected
     /** Dashboard PIDs the vehicle actually supports (all of them if we haven't asked yet). */
@@ -112,13 +124,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private var liveJob: Job? = null
     private var log: FileWriter? = null
     private var monitorJob: Job? = null
+    private var replayJob: Job? = null
     private val capture = ArrayList<String>()
     private var drb: DrbDatabase? = null
     private val drbFile get() = File(getApplication<Application>().filesDir, "drb/database.mem")
 
     private val profileDir get() = File(getApplication<Application>().filesDir, "profile")
+    private val replayDir get() = File(getApplication<Application>().filesDir, "replay")
 
-    init { loadSavedDrb(); loadSavedProfile() }
+    init { loadSavedDrb(); loadSavedProfile(); loadSavedReplay() }
 
     // ------------------------------------------------------------ connection
 
@@ -546,6 +560,134 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         profileDir.deleteRecursively()
         applyProfile(null, emptyList(), emptyList())
         _state.update { it.copy(message = "PID profile removed.") }
+    }
+
+    // ------------------------------------------------------------ replay & sweep
+
+    fun openReplay(open: Boolean) {
+        if (open) stopMonitor()
+        _state.update { it.copy(replayOpen = open) }
+    }
+
+    private fun loadSavedReplay() {
+        val f = File(replayDir, "plan.txt")
+        if (!f.exists()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val plan = Replay.parsePlan(f.readText())
+            val name = File(replayDir, "name.txt").takeIf { it.exists() }?.readText()?.trim() ?: f.name
+            if (plan.isNotEmpty()) _state.update { it.copy(replayPlan = plan, replayName = name) }
+        }
+    }
+
+    fun importReplay(uri: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val text = app.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                    ?: throw java.io.IOException("Couldn't open the file")
+                val plan = Replay.parsePlan(text)
+                if (plan.isEmpty()) {
+                    _state.update { it.copy(message = "No requests found. Each line should look like \"7E1 221940\".") }
+                    return@launch
+                }
+                val name = displayName(uri) ?: "replay.txt"
+                replayDir.mkdirs()
+                File(replayDir, "plan.txt").writeText(text)
+                File(replayDir, "name.txt").writeText(name)
+                setPlan(plan, name)
+                _state.update { it.copy(message = "Loaded ${plan.size} requests from $name") }
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "Import failed: ${e.message}") }
+            }
+        }
+    }
+
+    /** A plan that works on the simulator, for trying the screen without a vehicle. */
+    fun loadDemoReplay() = setPlan(listOf(
+        ReplayRequest("7E0", "010C"),
+        ReplayRequest("7E0", "010D"),
+        ReplayRequest("7E0", "221940"),
+        ReplayRequest("7E1", "221940"),
+        ReplayRequest(null, "0902"),
+    ), "Demo plan (simulator)")
+
+    /**
+     * Mode 22 across the modules a CAN vehicle always has powered: engine (7E0) and
+     * transmission (7E1). Other modules stay asleep until a diagnostic session is opened,
+     * which is a write — so they are left alone.
+     */
+    fun sweepMode22() {
+        val can = elm?.protocol?.isCan == true
+        if (!can) {
+            _state.update { it.copy(message = "A sweep needs CAN. On a pre-CAN bus there is no module map to sweep.") }
+            return
+        }
+        setPlan(Replay.sweep(listOf("7E0", "7E1"), 0x0000, 0x00FF), "Sweep · mode 22 · 0000–00FF · 7E0, 7E1")
+    }
+
+    private fun setPlan(plan: List<ReplayRequest>, name: String) = _state.update {
+        it.copy(replayPlan = plan, replayName = name, replayResults = emptyList(),
+            replayDone = 0, replayTotal = 0, replayStatus = null)
+    }
+
+    fun runReplay() {
+        val o = obd
+        if (o == null) {
+            _state.update { it.copy(message = "Connect to an adapter first.") }
+            return
+        }
+        val plan = _state.value.replayPlan
+        if (plan.isEmpty() || replayJob?.isActive == true) return
+        stopLive()
+        val results = ArrayList<ReplayResult>()
+        _state.update {
+            it.copy(replayRunning = true, replayResults = emptyList(), replayDone = 0,
+                replayTotal = plan.size, replayStatus = "Running…")
+        }
+        replayJob = viewModelScope.launch {
+            try {
+                for ((i, r) in plan.withIndex()) {
+                    val res = if (!Replay.isReadOnly(r.request)) {
+                        ReplayResult(r.module, r.request, skipped = "not a read request")
+                    } else {
+                        try {
+                            val lines = o.raw(r.module, r.request)
+                            if (lines.isEmpty()) ReplayResult(r.module, r.request, error = "no answer")
+                            else ReplayResult(r.module, r.request, lines = lines)
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            ReplayResult(r.module, r.request, error = friendly(e))
+                        }
+                    }
+                    results += res
+                    _state.update { s -> s.copy(replayResults = results.toList(), replayDone = i + 1) }
+                }
+                _state.update { it.copy(replayRunning = false, replayStatus = "Done · ${results.count { r -> r.answered }} answered") }
+                saveReplay(results)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _state.update { it.copy(replayRunning = false, replayStatus = "Stopped after ${results.size}") }
+                if (results.isNotEmpty()) saveReplay(results)
+                throw e
+            }
+        }
+    }
+
+    fun stopReplay() {
+        replayJob?.cancel(); replayJob = null
+        _state.update { it.copy(replayRunning = false) }
+    }
+
+    fun saveReplayResults() = saveReplay(_state.value.replayResults)
+
+    private fun saveReplay(results: List<ReplayResult>) {
+        if (results.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val dir = File(getApplication<Application>().getExternalFilesDir(null), "logs").apply { mkdirs() }
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val f = File(dir, "replay-$stamp.csv")
+            f.writeText(Replay.toCsv(results))
+            _state.update { it.copy(message = "Saved ${results.size} replies: ${f.absolutePath}") }
+        }
     }
 
     // ------------------------------------------------------------ logging & settings

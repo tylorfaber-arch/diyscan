@@ -785,7 +785,13 @@ fun SettingsScreen(
 // =================================================================== BUS MONITOR
 
 @Composable
-fun MonitorScreen(state: UiState, onStart: () -> Unit, onStop: () -> Unit, onSave: () -> Unit) {
+fun MonitorScreen(
+    state: UiState,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onSave: () -> Unit,
+    onOpenReplay: () -> Unit,
+) {
     var view by remember { mutableStateOf(0) }
     val c = state.conn as? Conn.Connected
     val now = System.currentTimeMillis()
@@ -809,6 +815,8 @@ fun MonitorScreen(state: UiState, onStart: () -> Unit, onStop: () -> Unit, onSav
             Segmented(listOf("By ID · ${state.busIds.size}", "Raw stream"), view) { view = it }
             Spacer(Modifier.height(6.dp))
         }
+
+        item { ReplayEntry(state, onOpenReplay) }
 
         if (!state.monitorRunning && state.busTotal == 0) {
             item {
@@ -874,6 +882,31 @@ private fun BusIdRow(b: dev.diyscan.BusId, now: Long) {
                 }
             }
             Text("×${b.count}", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+/** Entry card for the request replay / mode 22 sweep screen. */
+@Composable
+private fun ReplayEntry(state: UiState, onOpen: () -> Unit) {
+    Panel(Modifier.fillMaxWidth(), onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Palette.AmberGlow),
+                contentAlignment = Alignment.Center,
+            ) { Text("RE", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Palette.Amber) }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Request replay", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    when {
+                        state.replayPlan.isNotEmpty() -> "${state.replayPlan.size} requests · ${state.replayName ?: "plan"}"
+                        else -> "Ask the vehicle what a scan tool asked it, and keep the answers"
+                    },
+                    color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
         }
     }
 }

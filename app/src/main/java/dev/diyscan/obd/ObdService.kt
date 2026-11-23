@@ -66,4 +66,11 @@ class ObdService(private val elm: Elm327) {
     }
 
     suspend fun vin(): String? = runCatching { Parsing.vin(elm.request("0902", 8_000), isCan) }.getOrNull()
+
+    /**
+     * Send one request as-is and hand back the reply lines. Used by the replay runner, so it
+     * deliberately does no decoding: what the module said is the evidence.
+     */
+    suspend fun raw(module: String?, request: String, timeoutMs: Long = 3_000): List<String> =
+        elm.request(request, timeoutMs, header = module).map { it.replace(" ", "").uppercase() }
 }

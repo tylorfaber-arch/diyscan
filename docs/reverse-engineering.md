@@ -74,5 +74,12 @@ screen at two different temperatures and the formula is `A-40`.
 ## After the tool is gone
 
 `replay.txt` is the durable part. Replaying those exact requests with any adapter
-reproduces every reading the tool showed. The app can grow a replay/sweep screen for
-this; until then, any ELM327 terminal can send the hex directly.
+reproduces every reading the tool showed.
+
+The app has that screen now: **Bus → Request replay → Import replay.txt → Run**. It sends
+only read services (01, 02, 03, 05, 06, 07, 09, 0A, 21, 22) and refuses everything else,
+so a replay cannot clear codes, start a routine, write a value, or answer a seed/key
+exchange. On a CAN vehicle, **Sweep mode 22** asks the engine (7E0) and transmission (7E1)
+for every PID from 0000 to 00FF and keeps whatever answers.
+
+Test it without a vehicle: **Demo plan** runs against the simulator.

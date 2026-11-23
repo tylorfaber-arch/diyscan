@@ -61,6 +61,7 @@ import dev.diyscan.ui.DrbBrowser
 import dev.diyscan.ui.LiveScreen
 import dev.diyscan.ui.MonitorScreen
 import dev.diyscan.ui.OverviewScreen
+import dev.diyscan.ui.ReplayScreen
 import dev.diyscan.ui.SettingsScreen
 import dev.diyscan.ui.theme.DiyScanTheme
 import dev.diyscan.ui.theme.Palette
@@ -105,6 +106,10 @@ private fun App(vm: ScanViewModel) {
         if (uri != null) vm.importProfile(uri)
     }
     val pickProfile = { profilePicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream")) }
+    val replayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importReplay(uri)
+    }
+    val pickReplay = { replayPicker.launch(arrayOf("text/*", "application/octet-stream")) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         hasPermission = ok
         if (ok) vm.refreshDevices()
@@ -125,6 +130,7 @@ private fun App(vm: ScanViewModel) {
         if (tab == Tab.LIVE && state.connected) vm.startLive()
         if (tab != Tab.BUS) vm.stopMonitor()
     }
+    BackHandler(enabled = state.replayOpen) { vm.openReplay(false) }
     BackHandler(enabled = state.connected && tab != Tab.OVERVIEW) { tab = Tab.OVERVIEW }
 
     Scaffold(
@@ -139,6 +145,17 @@ private fun App(vm: ScanViewModel) {
                     onImport = pickDrb,
                     onRemove = vm::removeDrb,
                     onClose = { vm.openDrb(false) },
+                )
+            } else if (state.replayOpen) {
+                ReplayScreen(
+                    state = state,
+                    onClose = { vm.openReplay(false) },
+                    onImport = pickReplay,
+                    onDemo = vm::loadDemoReplay,
+                    onSweep = vm::sweepMode22,
+                    onRun = vm::runReplay,
+                    onStop = vm::stopReplay,
+                    onSave = vm::saveReplayResults,
                 )
             } else if (!state.connected) {
                 ConnectScreen(
@@ -215,7 +232,8 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, pickProfile:
         Tab.OVERVIEW -> OverviewScreen(state, onRefresh = vm::refreshOverview, onGoCodes = { go(Tab.CODES) }, onGoLive = { go(Tab.LIVE) })
         Tab.LIVE -> LiveScreen(state, onStart = vm::startLive, onStop = vm::stopLive, onToggleLog = vm::toggleLogging, onTogglePid = vm::toggleDashboardPid)
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
-        Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture)
+        Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture,
+            onOpenReplay = { vm.openReplay(true) })
         Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenDrb = { vm.openDrb(true) },
             onImportProfile = pickProfile, onRemoveProfile = vm::removeProfile)
     }

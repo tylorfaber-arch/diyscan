@@ -16,6 +16,7 @@ An Android OBD-II scanner app for ELM327-compatible Bluetooth adapters. It works
 - **Bus monitor**: listen to all bus traffic (ATMA), grouped by message ID, with changed bytes highlighted, plus a saved capture. On pre-CAN Chryslers this is the PCI bus, the starting point for decoding manufacturer-specific messages
 - **Chrysler DRB-III database browser**: import your own `database.mem` (or a .zip containing it) to browse every module and command the dealer DRB-III tool knew, including request bytes and how replies are decoded. The database isn't included; it stays on your device. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - **USB adapters** over OTG (FTDI, CH340, Prolific, CP210x chips) with baud auto-detect, as well as Bluetooth
+- **Request replay & sweep**: import the request list from a capture catalog (`tools/obd_catalog.py`) and ask the vehicle the same questions the scan tool asked, or sweep mode 22 across the engine and transmission for PIDs it never showed. Read services only: clears, routines, writes and seed/key are refused
 - **Simulator mode**: a virtual 2005 Ram 1500 (J1850 VPW) with real-world faults, for testing without a vehicle
 
 ## Layout
