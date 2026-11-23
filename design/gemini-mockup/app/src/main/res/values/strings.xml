@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DIY Scan</string>
+    <string name="app_tagline">OBD-II Diagnostic Workbench</string>
+    <string name="nav_overview">Overview</string>
+    <string name="nav_live">Live</string>
+    <string name="nav_codes">Codes</string>
+    <string name="nav_bus">Bus</string>
+    <string name="nav_settings">Tools</string>
+    <string name="connect_headline">Connect Vehicle</string>
+    <string name="connect_subtitle">Select an ELM327 Bluetooth, USB-OTG adapter, or launch the built-in simulator.</string>
+    <string name="demo_badge">SIMULATED VEHICLE</string>
+    <string name="btn_connect_simulator">Launch Demo Vehicle</string>
+    <string name="btn_disconnect">Disconnect Adapter</string>
+    <string name="btn_read_codes">Read Codes</string>
+    <string name="btn_clear_codes">Clear Codes</string>
+    <string name="btn_refresh">Refresh</string>
+    <string name="cd_vehicle_blueprint">Vehicle diagnostic telemetry blueprint</string>
+    <string name="cd_back">Navigate back</string>
+    <string name="cd_theme_toggle">Toggle workshop daylight or night cockpit theme</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "DIY Scan",
+  "description": "Precision automotive OBD-II diagnostic reader, live telemetry cockpit, CAN/PCI bus monitor, and DRB-III module workbench mockup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
