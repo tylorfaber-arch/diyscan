@@ -41,6 +41,33 @@ You get one session with the tool, so capture everything and decide later.
 - **J1850 VPW (the Ram)**: 10.4 kbps is slow enough that an ELM327 in monitor mode (the
   app's Bus tab) keeps every frame. That is the one case the phone is the right sniffer.
 
+### Getting the capture onto a PC
+
+**CAN (the Cruze) — CANable + can-utils:**
+
+```bash
+sudo pacman -S can-utils          # candump, cansend
+sudo ip link set can0 type can bitrate 500000
+sudo ip link set can0 up
+candump -l can0                   # writes candump-<timestamp>.log
+```
+
+**VPW (the Ram) — a USB ELM327, no extra packages:**
+
+```bash
+sudo usermod -aG dialout $USER    # once, then log out and back in
+python3 tools/elm_sniff.py /dev/ttyUSB0 -o capture.csv
+```
+
+`elm_sniff.py` uses only the standard library, turns headers on, and writes the same
+`time_ms,frame` CSV the phone app writes. Ctrl-C stops it cleanly.
+
+Then, either way:
+
+```bash
+python3 tools/obd_catalog.py capture.csv -o out/
+```
+
 Stick to reading. Requests that run actuator tests, write values, or do the seed/key
 handshake can change module state; keep the capture and any replay read-only.
 
