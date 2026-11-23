@@ -64,6 +64,7 @@ import dev.diyscan.ui.MonitorScreen
 import dev.diyscan.ui.OverviewScreen
 import dev.diyscan.ui.ReplayScreen
 import dev.diyscan.ui.SettingsScreen
+import dev.diyscan.ui.UpdateDialog
 import dev.diyscan.ui.theme.DiyScanTheme
 import dev.diyscan.ui.theme.Palette
 
@@ -132,6 +133,17 @@ private fun App(vm: ScanViewModel) {
         if (tab != Tab.BUS) vm.stopMonitor()
     }
     BackHandler(enabled = state.replayOpen) { vm.openReplay(false) }
+
+    state.update?.let { u ->
+        UpdateDialog(
+            info = u, installed = state.installedBuild,
+            onDownload = {
+                vm.dismissUpdate()
+                runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u.apkUrl))) }
+            },
+            onLater = vm::dismissUpdate,
+        )
+    }
     BackHandler(enabled = state.connected && tab != Tab.OVERVIEW) { tab = Tab.OVERVIEW }
 
     Scaffold(
@@ -247,6 +259,7 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, pickProfile:
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
         Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture,
             onOpenReplay = { vm.openReplay(true) })
-        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenImports = { vm.openImports(true) })
+        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenImports = { vm.openImports(true) },
+            onAutoUpdate = vm::setAutoUpdateCheck, onCheckUpdate = { vm.checkForUpdate(manual = true) })
     }
 }

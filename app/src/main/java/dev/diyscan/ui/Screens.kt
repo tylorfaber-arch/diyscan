@@ -732,6 +732,8 @@ fun SettingsScreen(
     onImperial: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
     onOpenImports: () -> Unit = {},
+    onAutoUpdate: (Boolean) -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
 ) {
     val c = state.conn as? Conn.Connected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenPad)) {
@@ -751,6 +753,28 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         ImportsEntry(state, onOpenImports)
         Spacer(Modifier.height(12.dp))
+        Panel(Modifier.fillMaxWidth()) {
+            SectionLabel("Updates")
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Check on startup", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Asks GitHub if a newer build exists. Nothing else is sent." +
+                            if (state.installedBuild > 1) " You have build ${state.installedBuild}." else " This is a local build.",
+                        color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(
+                    checked = state.autoUpdateCheck, onCheckedChange = onAutoUpdate,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Color(0xFF1C1300)),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            GhostButton(if (state.updateChecking) "Checking…" else "Check now", icon = Icons.Filled.Refresh,
+                enabled = !state.updateChecking, onClick = onCheckUpdate)
+        }
+        Spacer(Modifier.height(12.dp))
         if (c != null) {
             Panel(Modifier.fillMaxWidth()) {
                 SectionLabel("Connection")
@@ -766,7 +790,7 @@ fun SettingsScreen(
         Panel(Modifier.fillMaxWidth()) {
             SectionLabel("About")
             Spacer(Modifier.height(10.dp))
-            Text("DIY Scan 0.1", style = MaterialTheme.typography.titleMedium)
+            Text("DIY Scan " + if (state.installedBuild > 1) "build ${state.installedBuild}" else "(local build)", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Generic OBD-II (SAE J1979) for 1996+ vehicles. Reads codes, freeze frame, readiness, VIN and live sensors. " +
                     "Manufacturer-specific modules (ABS, airbag, transmission) aren't supported yet.",
@@ -908,3 +932,33 @@ private fun ReplayEntry(state: UiState, onOpen: () -> Unit) {
 }
 
 
+
+/** Shown on startup (or after Check now) when GitHub has a newer build. */
+@Composable
+fun UpdateDialog(info: dev.diyscan.UpdateInfo, installed: Int, onDownload: () -> Unit, onLater: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onLater,
+        icon = { Icon(Icons.Filled.Refresh, null, tint = Palette.Amber) },
+        title = { Text("Update available") },
+        text = {
+            Column {
+                Text(
+                    "Build ${info.build} is out" + if (installed > 1) " (you have $installed)." else ".",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (info.notes.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(info.notes.take(600), color = Palette.TextMuted, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Download opens the APK in your browser. Open it when it finishes and tap Update. Your imports and settings are kept.",
+                    color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDownload) { Text("Download", color = Palette.Amber) } },
+        dismissButton = { TextButton(onClick = onLater) { Text("Later", color = Palette.Text) } },
+        containerColor = Palette.PanelHigh,
+    )
+}

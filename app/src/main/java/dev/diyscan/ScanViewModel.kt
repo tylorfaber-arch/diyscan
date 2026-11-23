@@ -99,6 +99,11 @@ data class UiState(
     // imported PID profiles (Torque-style CSV), any number, each can be switched off
     val profiles: List<ProfileInfo> = emptyList(),
     val importsOpen: Boolean = false,
+    // app updates (GitHub Releases)
+    val installedBuild: Int = 0,
+    val update: UpdateInfo? = null,
+    val autoUpdateCheck: Boolean = true,
+    val updateChecking: Boolean = false,
     // replay / sweep
     val replayOpen: Boolean = false,
     val replayName: String? = null,
@@ -138,7 +143,54 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     private val disabledFile get() = File(profilesDir, "disabled.txt")
     private val replayDir get() = File(getApplication<Application>().filesDir, "replay")
 
-    init { loadSavedDrb(); viewModelScope.launch(Dispatchers.IO) { reloadProfiles() }; loadSavedReplay() }
+    init {
+        loadSavedDrb(); viewModelScope.launch(Dispatchers.IO) { reloadProfiles() }; loadSavedReplay()
+        val auto = prefs.getBoolean("autoUpdateCheck", true)
+        _state.update { it.copy(installedBuild = installedBuild(), autoUpdateCheck = auto) }
+        if (auto) checkForUpdate(manual = false)
+    }
+
+    // ------------------------------------------------------------ app updates
+
+    private val prefs get() = getApplication<Application>().getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    private fun installedBuild(): Int = runCatching {
+        val app = getApplication<Application>()
+        androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(app.packageManager.getPackageInfo(app.packageName, 0)).toInt()
+    }.getOrDefault(0)
+
+    /**
+     * Ask GitHub for the latest release. On startup this is silent unless there's an update;
+     * a manual check also reports "up to date" or the error. Local dev builds (version 1) skip the startup check.
+     */
+    fun checkForUpdate(manual: Boolean) {
+        val installed = installedBuild()
+        if (!manual && installed <= 1) return
+        viewModelScope.launch {
+            _state.update { it.copy(updateChecking = true) }
+            val result = runCatching { UpdateChecker.check(installed) }
+            _state.update { s ->
+                val found = result.getOrNull()
+                s.copy(
+                    updateChecking = false,
+                    update = found,
+                    message = when {
+                        !manual -> s.message
+                        result.isFailure -> "Couldn't check for updates: ${result.exceptionOrNull()?.message}"
+                        found == null -> "You're on the latest build ($installed)."
+                        else -> s.message
+                    },
+                )
+            }
+        }
+    }
+
+    fun dismissUpdate() = _state.update { it.copy(update = null) }
+
+    fun setAutoUpdateCheck(on: Boolean) {
+        prefs.edit().putBoolean("autoUpdateCheck", on).apply()
+        _state.update { it.copy(autoUpdateCheck = on) }
+    }
 
     // ------------------------------------------------------------ connection
 
@@ -261,7 +313,8 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             UiState(devices = it.devices, usbDevices = it.usbDevices, imperial = it.imperial, dashboard = it.dashboard,
                 drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen, drbFavorites = it.drbFavorites,
-                profiles = it.profiles, importsOpen = it.importsOpen)
+                profiles = it.profiles, importsOpen = it.importsOpen,
+                installedBuild = it.installedBuild, update = it.update, autoUpdateCheck = it.autoUpdateCheck)
         }
     }
 

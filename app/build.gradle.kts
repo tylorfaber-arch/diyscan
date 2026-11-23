@@ -11,8 +11,11 @@ android {
         applicationId = "dev.diyscan"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        // CI stamps the GitHub Actions run number, which is also the release tag (build-N),
+        // so the app can tell whether a newer release exists. Local builds are 1.
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "0.1.$run"
     }
     // CI signs with a fixed key (from GitHub secrets) so new versions install over old ones.
     val ks = System.getenv("SIGNING_KEYSTORE")
