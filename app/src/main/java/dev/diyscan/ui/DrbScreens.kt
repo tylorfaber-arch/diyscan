@@ -131,7 +131,7 @@ private fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
             .border(1.dp, if (on) Palette.Amber else Palette.Line, CircleShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) { Text(label, color = if (on) Color(0xFF1C1300) else Palette.Text, style = MaterialTheme.typography.labelLarge) }
+    ) { Text(label, color = if (on) Palette.OnAccent else Palette.Text, style = MaterialTheme.typography.labelLarge) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

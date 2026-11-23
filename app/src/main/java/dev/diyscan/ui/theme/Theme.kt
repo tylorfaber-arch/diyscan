@@ -1,84 +1,140 @@
 package dev.diyscan.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 
 /**
- * "Night cluster" — graphite panels with amber backlight, like a dash at night.
- * Status colors are reserved for meaning: green = good, amber = attention, red = fault.
+ * Two looks from the Gemini design pass (design/gemini-mockup):
+ *  - Workshop Daylight: warm paper canvas, ink text, signal-orange accent. Readable under shop lights.
+ *  - Night Cockpit: obsidian panels with luminous telemetry. Easy on the eyes in a dark cab.
+ * Status colors carry meaning only: good / warn / fault, with cobalt reserved for bus & imported data.
  */
-object Palette {
-    val Bg = Color(0xFF0B0D10)
-    val Panel = Color(0xFF14181D)
-    val PanelHigh = Color(0xFF1B2027)
-    val Line = Color(0xFF262D36)
-    val Track = Color(0xFF222932)
+enum class ThemeMode(val label: String) { SYSTEM("System"), LIGHT("Daylight"), DARK("Night") }
 
-    val Amber = Color(0xFFFFB020)
-    val AmberDim = Color(0xFF8A5E10)
-    val AmberGlow = Color(0x33FFB020)
-
-    val Text = Color(0xFFE9ECEF)
-    val TextMuted = Color(0xFF8D96A1)
-    val TextFaint = Color(0xFF5B636D)
-
-    val Good = Color(0xFF3DDC97)
-    val GoodBg = Color(0x1F3DDC97)
-    val Warn = Color(0xFFFFB020)
-    val WarnBg = Color(0x1FFFB020)
-    val Fault = Color(0xFFFF5A5F)
-    val FaultBg = Color(0x1FFF5A5F)
-    val Info = Color(0xFF5AB0FF)
-    val InfoBg = Color(0x1F5AB0FF)
-}
-
-private val scheme = darkColorScheme(
-    primary = Palette.Amber,
-    onPrimary = Color(0xFF1C1300),
-    primaryContainer = Palette.AmberDim,
-    onPrimaryContainer = Palette.Text,
-    secondary = Palette.Info,
-    background = Palette.Bg,
-    onBackground = Palette.Text,
-    surface = Palette.Panel,
-    onSurface = Palette.Text,
-    surfaceVariant = Palette.PanelHigh,
-    onSurfaceVariant = Palette.TextMuted,
-    surfaceContainer = Palette.Panel,
-    surfaceContainerHigh = Palette.PanelHigh,
-    surfaceContainerHighest = Palette.PanelHigh,
-    surfaceContainerLow = Palette.Bg,
-    outline = Palette.Line,
-    outlineVariant = Palette.Line,
-    error = Palette.Fault,
+private val WorkshopLightColorScheme = lightColorScheme(
+    primary = SignalOrange,
+    onPrimary = Color.White,
+    primaryContainer = SignalOrangeContainer,
+    onPrimaryContainer = SignalOrangeOnContainer,
+    secondary = TelemetryCobalt,
+    onSecondary = Color.White,
+    secondaryContainer = TelemetryCobaltContainer,
+    onSecondaryContainer = Color(0xFF0A2463),
+    tertiary = EmeraldPass,
+    onTertiary = Color.White,
+    background = DaylightCanvas,
+    onBackground = DaylightInk,
+    surface = DaylightPlate,
+    onSurface = DaylightInk,
+    surfaceVariant = DaylightWell,
+    onSurfaceVariant = DaylightInkMuted,
+    surfaceContainer = DaylightPlate,
+    surfaceContainerHigh = DaylightPlateElevated,
+    surfaceContainerHighest = DaylightWell,
+    surfaceContainerLow = DaylightCanvas,
+    outline = DaylightBezel,
+    outlineVariant = DaylightBezel,
+    error = CrimsonFault,
+    onError = Color.White,
+    errorContainer = CrimsonFaultBg,
+    onErrorContainer = Color(0xFF690A0A),
 )
 
-/** Numbers use tabular figures so values don't jitter as they change. */
-val Numeric = TextStyle(fontFeatureSettings = "tnum", fontWeight = FontWeight.SemiBold)
+private val NightCockpitColorScheme = darkColorScheme(
+    primary = NightSignalOrange,
+    onPrimary = Color(0xFF1F0A03),
+    primaryContainer = NightSignalOrangeContainer,
+    onPrimaryContainer = NightSignalOrangeOnContainer,
+    secondary = NightCobalt,
+    onSecondary = Color(0xFF041D29),
+    secondaryContainer = NightCobaltContainer,
+    onSecondaryContainer = Color(0xFFC2EBFF),
+    tertiary = NightEmerald,
+    onTertiary = Color(0xFF032117),
+    background = NightCanvas,
+    onBackground = NightInk,
+    surface = NightPlate,
+    onSurface = NightInk,
+    surfaceVariant = NightWell,
+    onSurfaceVariant = NightInkMuted,
+    surfaceContainer = NightPlate,
+    surfaceContainerHigh = NightPlateElevated,
+    surfaceContainerHighest = NightWell,
+    surfaceContainerLow = NightCanvas,
+    outline = NightBezel,
+    outlineVariant = NightBezel,
+    error = NightCrimson,
+    onError = Color(0xFF2E0709),
+    errorContainer = NightCrimsonBg,
+    onErrorContainer = Color(0xFFFFD5D7),
+)
 
-private val type = Typography(
-    displayLarge = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp, fontFeatureSettings = "tnum"),
-    displayMedium = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, fontFeatureSettings = "tnum"),
-    headlineMedium = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
-    headlineSmall = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-    labelMedium = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp),
-    labelSmall = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.8.sp, fontFamily = FontFamily.Monospace),
+private val DiyScanShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp),
 )
 
 @Composable
-fun DiyScanTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = scheme, typography = type, content = content)
+fun isDarkTheme(mode: ThemeMode): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
 }
+
+@Composable
+fun DiyScanTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val dark = isDarkTheme(mode)
+    CompositionLocalProvider(LocalInstrumentColors provides if (dark) NightInstrumentColors else DaylightInstrumentColors) {
+        MaterialTheme(
+            colorScheme = if (dark) NightCockpitColorScheme else WorkshopLightColorScheme,
+            typography = DiyScanTypography,
+            shapes = DiyScanShapes,
+            content = content,
+        )
+    }
+}
+
+/**
+ * Semantic color names used across the screens, resolved from the active theme
+ * (Workshop Daylight or Night Cockpit). Read them only inside composables.
+ */
+object Palette {
+    private val c @Composable @ReadOnlyComposable get() = LocalInstrumentColors.current
+    val Bg @Composable @ReadOnlyComposable get() = c.canvas
+    val Panel @Composable @ReadOnlyComposable get() = c.plate
+    val PanelHigh @Composable @ReadOnlyComposable get() = c.plateElevated
+    val Well @Composable @ReadOnlyComposable get() = c.well
+    val Line @Composable @ReadOnlyComposable get() = c.bezel
+    val Track @Composable @ReadOnlyComposable get() = c.gaugeTrack
+    /** Primary accent (signal orange). Kept as "Amber" so existing screens read naturally. */
+    val Amber @Composable @ReadOnlyComposable get() = c.accent
+    val AmberGlow @Composable @ReadOnlyComposable get() = c.accentBg
+    val OnAccent @Composable @ReadOnlyComposable get() = if (c.isDark) Color(0xFF1F0A03) else Color.White
+    val Text @Composable @ReadOnlyComposable get() = c.ink
+    val TextMuted @Composable @ReadOnlyComposable get() = c.inkMuted
+    val TextFaint @Composable @ReadOnlyComposable get() = c.inkFaint
+    val Good @Composable @ReadOnlyComposable get() = c.good
+    val GoodBg @Composable @ReadOnlyComposable get() = c.goodBg
+    val Warn @Composable @ReadOnlyComposable get() = c.warn
+    val WarnBg @Composable @ReadOnlyComposable get() = c.warnBg
+    val Fault @Composable @ReadOnlyComposable get() = c.fault
+    val FaultBg @Composable @ReadOnlyComposable get() = c.faultBg
+    /** Cobalt: bus traffic and imported (non-standard) data. */
+    val Info @Composable @ReadOnlyComposable get() = c.bus
+    val InfoBg @Composable @ReadOnlyComposable get() = c.busBg
+}
+
+/** Numbers use tabular figures so values don't jitter as they change. */
+val Numeric = TelemetryReadoutStyle

@@ -58,6 +58,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Fonts
+
+Space Grotesk, Plus Jakarta Sans and JetBrains Mono (in `app/src/main/res/font/`) are licensed under the SIL Open Font License 1.1.
+
 ## Chrysler DRB-III database
 
 The `database.mem` file is Chrysler's and is **not** included in this repository or the app. Users import their own copy, which is stored only on their device.

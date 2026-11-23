@@ -1,5 +1,14 @@
 package dev.diyscan.ui
 
+import dev.diyscan.ui.theme.BlueprintBorder
+import dev.diyscan.ui.theme.BlueprintSlate
+import dev.diyscan.R
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -109,27 +118,30 @@ fun ConnectScreen(
     onOpenBluetoothSettings: () -> Unit,
     onOpenImports: () -> Unit = {},
     onConnectUsb: (dev.diyscan.UsbItem) -> Unit = {},
+    darkTheme: Boolean = false,
+    onToggleTheme: () -> Unit = {},
 ) {
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.radialGradient(listOf(Palette.AmberGlow, Color.Transparent), radius = 900f)
-        )
-    ) {
+    Box(Modifier.fillMaxSize().background(Palette.Bg)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
-                Spacer(Modifier.height(28.dp))
-                Logo()
-                Spacer(Modifier.height(22.dp))
-                Text("Plug in. Key on.\nSee what your vehicle is saying.", style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Works with ELM327-compatible Bluetooth adapters on any 1996+ vehicle — J1850, ISO 9141, KWP2000 and CAN.",
-                    style = MaterialTheme.typography.bodyLarge, color = Palette.TextMuted,
-                )
-                Spacer(Modifier.height(28.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Logo(Modifier.weight(1f))
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).background(Palette.Panel)
+                            .border(1.dp, Palette.Line, CircleShape).clickable(onClick = onToggleTheme),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(if (darkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            if (darkTheme) "Switch to Daylight theme" else "Switch to Night theme", tint = Palette.Text)
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                BlueprintHero(busy = state.conn is Conn.Connecting, onDemo = onSimulator)
+                Spacer(Modifier.height(20.dp))
 
                 when (val c = state.conn) {
                     is Conn.Connecting -> ConnectingCard(c.step)
@@ -207,28 +219,9 @@ fun ConnectScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(26.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f).height(1.dp).background(Palette.Line))
-                        Text("  no adapter handy?  ", color = Palette.TextFaint, style = MaterialTheme.typography.bodySmall)
-                        Box(Modifier.weight(1f).height(1.dp).background(Palette.Line))
-                    }
-                    Spacer(Modifier.height(18.dp))
-                    Panel(Modifier.fillMaxWidth(), onClick = onSimulator, accent = Palette.Info) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Palette.InfoBg),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.PlayArrow, null, tint = Palette.Info) }
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("Try the simulator", style = MaterialTheme.typography.titleMedium)
-                                Text("A demo vehicle with a few common faults. No adapter needed.", color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium)
-                            }
-                            Icon(Icons.Filled.KeyboardArrowRight, null, tint = Palette.TextMuted)
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(22.dp))
+                    SectionLabel("Imports")
+                    Spacer(Modifier.height(10.dp))
                     ImportsEntry(state, onOpenImports)
                 }
                 Spacer(Modifier.height(32.dp))
@@ -238,16 +231,54 @@ fun ConnectScreen(
 }
 
 @Composable
-private fun Logo() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun Logo(modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFFFFC24D), Palette.Amber))),
+            Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(BlueprintSlate)
+                .border(1.dp, BlueprintBorder, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Build, null, tint = Color(0xFF1C1300), modifier = Modifier.size(22.dp)) }
+        ) { Image(painterResource(R.drawable.ic_launcher), "DIY Scan", Modifier.size(36.dp)) }
         Spacer(Modifier.width(12.dp))
-        Text("DIY", style = MaterialTheme.typography.titleLarge, color = Palette.Amber, fontWeight = FontWeight.Black)
-        Text(" Scan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+        Column {
+            Text("DIY SCAN", style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 1.4.sp))
+            Text("OBD-II · CAN · J1850 · IMPORTS", style = MaterialTheme.typography.labelSmall, color = Palette.TextMuted)
+        }
+    }
+}
+
+/** Dark "blueprint" hero: vehicle telemetry art, bus pills, headline and the demo-vehicle button. */
+@Composable
+private fun BlueprintHero(busy: Boolean, onDemo: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(BlueprintSlate)
+            .border(1.dp, BlueprintBorder, RoundedCornerShape(20.dp)),
+    ) {
+        Box(Modifier.fillMaxWidth().height(176.dp)) {
+            Image(
+                painterResource(R.drawable.hero_telemetry), "Vehicle telemetry illustration",
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+            )
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, BlueprintSlate.copy(alpha = 0.9f)))))
+            Row(Modifier.align(Alignment.TopStart).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("ELM327", Color(0xFFFF7A52), Color(0xCC1E1410))
+                Pill("J1850 · ISO · CAN", Color(0xFF7DD3FC), Color(0xCC0D1C26), dot = false)
+            }
+            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Text("Plug in. Key on.", style = MaterialTheme.typography.headlineMedium, color = Color(0xFFF4F6F9))
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Codes, live gauges, readiness and bus traffic on any 1996+ vehicle.",
+                    style = MaterialTheme.typography.bodySmall, color = Color(0xFFAAB4C3),
+                )
+            }
+        }
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            AmberButton(
+                if (busy) "Connecting…" else "Try the demo vehicle",
+                icon = Icons.Filled.DirectionsCar, enabled = !busy, onClick = onDemo,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -433,8 +464,8 @@ private fun BusyRow(text: String) {
     }
 }
 
-fun severityColor(s: Severity) = when (s) { Severity.HIGH -> Palette.Fault; Severity.MEDIUM -> Palette.Warn; Severity.LOW -> Palette.Info }
-fun severityBg(s: Severity) = when (s) { Severity.HIGH -> Palette.FaultBg; Severity.MEDIUM -> Palette.WarnBg; Severity.LOW -> Palette.InfoBg }
+@Composable fun severityColor(s: Severity) = when (s) { Severity.HIGH -> Palette.Fault; Severity.MEDIUM -> Palette.Warn; Severity.LOW -> Palette.Info }
+@Composable fun severityBg(s: Severity) = when (s) { Severity.HIGH -> Palette.FaultBg; Severity.MEDIUM -> Palette.WarnBg; Severity.LOW -> Palette.InfoBg }
 
 // =================================================================== LIVE
 
@@ -487,8 +518,9 @@ fun LiveScreen(
                         val v = state.live[p.code]
                         val range = p.rangeFor(imp)
                         val frac = v?.let { ((p.display(it, imp) - range.start) / (range.endInclusive - range.start)).toFloat() } ?: 0f
-                        Panel(Modifier.weight(1f), padding = 10.dp) {
+                        Panel(Modifier.weight(1f), padding = 12.dp) {
                             ArcGauge(
+                                code = pidLabel(p),
                                 fraction = frac,
                                 valueText = p.format(v, imp),
                                 unit = p.unitFor(imp),
@@ -516,6 +548,8 @@ fun LiveScreen(
                 history = state.history[p.code].orEmpty().map { p.display(it.toDouble(), imp).toFloat() },
                 min = r.start.toFloat(),
                 max = r.endInclusive.toFloat(),
+                code = pidLabel(p),
+                custom = p.isCustom,
             )
         }
 
@@ -543,7 +577,7 @@ fun LiveScreen(
                             ) {
                                 Checkbox(
                                     checked = p in state.dashboard, onCheckedChange = { onTogglePid(p) },
-                                    colors = CheckboxDefaults.colors(checkedColor = Palette.Amber, checkmarkColor = Color(0xFF1C1300)),
+                                    colors = CheckboxDefaults.colors(checkedColor = Palette.Amber, checkmarkColor = Palette.OnAccent),
                                 )
                                 Column {
                                     Text(p.name, style = MaterialTheme.typography.bodyMedium)
@@ -729,6 +763,7 @@ private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> U
 @Composable
 fun SettingsScreen(
     state: UiState,
+    onThemeMode: (dev.diyscan.ui.theme.ThemeMode) -> Unit = {},
     onImperial: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
     onOpenImports: () -> Unit = {},
@@ -737,7 +772,23 @@ fun SettingsScreen(
 ) {
     val c = state.conn as? Conn.Connected
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ScreenPad)) {
-        ScreenTitle("Settings")
+        ScreenTitle("Tools & settings", "Theme, units, imports and updates")
+        Panel(Modifier.fillMaxWidth()) {
+            SectionLabel("Instrument theme")
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when (state.themeMode) {
+                    dev.diyscan.ui.theme.ThemeMode.SYSTEM -> "Follows your phone's light/dark setting."
+                    dev.diyscan.ui.theme.ThemeMode.LIGHT -> "Workshop Daylight: high contrast under shop lights."
+                    dev.diyscan.ui.theme.ThemeMode.DARK -> "Night Cockpit: low glare in a dark cab."
+                },
+                color = Palette.TextMuted, style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            val modes = dev.diyscan.ui.theme.ThemeMode.entries
+            SegmentedControl(modes.map { it.label }, modes.indexOf(state.themeMode), { onThemeMode(modes[it]) })
+        }
+        Spacer(Modifier.height(12.dp))
         Panel(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -746,7 +797,7 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = state.imperial, onCheckedChange = onImperial,
-                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Color(0xFF1C1300)),
+                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Palette.OnAccent),
                 )
             }
         }
@@ -767,7 +818,7 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = state.autoUpdateCheck, onCheckedChange = onAutoUpdate,
-                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Color(0xFF1C1300)),
+                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Palette.OnAccent),
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -894,7 +945,7 @@ private fun BusIdRow(b: dev.diyscan.BusId, now: Long) {
                     Text(
                         byte,
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
-                        color = if (hot) Color(0xFF1C1300) else Palette.Text,
+                        color = if (hot) Palette.OnAccent else Palette.Text,
                         modifier = Modifier.clip(RoundedCornerShape(5.dp))
                             .background(if (hot) Palette.Amber else Palette.Track)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -962,3 +1013,6 @@ fun UpdateDialog(info: dev.diyscan.UpdateInfo, installed: Int, onDownload: () ->
         containerColor = Palette.PanelHigh,
     )
 }
+
+/** Short PID tag shown on gauges and tiles: "0x0C" for standard PIDs, the request (e.g. "221940") for imported ones. */
+fun pidLabel(p: Pid): String = p.request ?: "0x${p.hex}"

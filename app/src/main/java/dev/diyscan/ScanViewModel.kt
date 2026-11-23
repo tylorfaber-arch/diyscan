@@ -104,6 +104,7 @@ data class UiState(
     val update: UpdateInfo? = null,
     val autoUpdateCheck: Boolean = true,
     val updateChecking: Boolean = false,
+    val themeMode: dev.diyscan.ui.theme.ThemeMode = dev.diyscan.ui.theme.ThemeMode.SYSTEM,
     // replay / sweep
     val replayOpen: Boolean = false,
     val replayName: String? = null,
@@ -146,7 +147,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     init {
         loadSavedDrb(); viewModelScope.launch(Dispatchers.IO) { reloadProfiles() }; loadSavedReplay()
         val auto = prefs.getBoolean("autoUpdateCheck", true)
-        _state.update { it.copy(installedBuild = installedBuild(), autoUpdateCheck = auto) }
+        val theme = runCatching { dev.diyscan.ui.theme.ThemeMode.valueOf(prefs.getString("themeMode", "SYSTEM")!!) }
+            .getOrDefault(dev.diyscan.ui.theme.ThemeMode.SYSTEM)
+        _state.update { it.copy(installedBuild = installedBuild(), autoUpdateCheck = auto, themeMode = theme) }
         if (auto) checkForUpdate(manual = false)
     }
 
@@ -186,6 +189,11 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissUpdate() = _state.update { it.copy(update = null) }
+
+    fun setThemeMode(mode: dev.diyscan.ui.theme.ThemeMode) {
+        prefs.edit().putString("themeMode", mode.name).apply()
+        _state.update { it.copy(themeMode = mode) }
+    }
 
     fun setAutoUpdateCheck(on: Boolean) {
         prefs.edit().putBoolean("autoUpdateCheck", on).apply()
@@ -314,7 +322,8 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             UiState(devices = it.devices, usbDevices = it.usbDevices, imperial = it.imperial, dashboard = it.dashboard,
                 drbModules = it.drbModules, drbCommandTotal = it.drbCommandTotal, drbOpen = it.drbOpen, drbFavorites = it.drbFavorites,
                 profiles = it.profiles, importsOpen = it.importsOpen,
-                installedBuild = it.installedBuild, update = it.update, autoUpdateCheck = it.autoUpdateCheck)
+                installedBuild = it.installedBuild, update = it.update, autoUpdateCheck = it.autoUpdateCheck,
+                themeMode = it.themeMode)
         }
     }
 

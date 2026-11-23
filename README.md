@@ -6,6 +6,7 @@ A generic Android OBD-II reader for ELM327-compatible Bluetooth and USB adapters
 
 ## Features
 
+- **Two instrument themes** from the Gemini design pass ([design/gemini-mockup](design/gemini-mockup/)): Workshop Daylight and Night Cockpit, or follow the system setting
 - Read stored, pending and permanent trouble codes, with descriptions, severity and tips
 - Clear codes (with a warning about readiness monitors)
 - Freeze frame data

@@ -66,6 +66,13 @@ import dev.diyscan.ui.ReplayScreen
 import dev.diyscan.ui.SettingsScreen
 import dev.diyscan.ui.UpdateDialog
 import dev.diyscan.ui.theme.DiyScanTheme
+import dev.diyscan.ui.theme.ThemeMode
+import dev.diyscan.ui.theme.isDarkTheme
+import androidx.activity.SystemBarStyle
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Speed
 import dev.diyscan.ui.theme.Palette
 
 class MainActivity : ComponentActivity() {
@@ -75,16 +82,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { DiyScanTheme { App(vm) } }
+        setContent {
+            val mode by vm.state.collectAsStateWithLifecycle()
+            val dark = isDarkTheme(mode.themeMode)
+            // Status/nav bar icons follow the app theme, not just the system setting.
+            LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+                )
+            }
+            DiyScanTheme(mode.themeMode) { App(vm) }
+        }
     }
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    OVERVIEW("Overview", Icons.Filled.Home),
-    LIVE("Live", Icons.Filled.PlayArrow),
+    OVERVIEW("Overview", Icons.Filled.Dashboard),
+    LIVE("Live", Icons.Filled.Speed),
     CODES("Codes", Icons.Filled.Warning),
-    BUS("Bus", Icons.Filled.List),
-    SETTINGS("Settings", Icons.Filled.Settings),
+    BUS("Bus", Icons.Filled.Sensors),
+    SETTINGS("Tools", Icons.Filled.Build),
 }
 
 private val btPermission =
@@ -193,6 +213,8 @@ private fun App(vm: ScanViewModel) {
                     onOpenBluetoothSettings = { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
                     onOpenImports = { vm.openImports(true) },
                     onConnectUsb = vm::connectUsb,
+                    darkTheme = isDarkTheme(state.themeMode),
+                    onToggleTheme = { vm.setThemeMode(if (isDarkTheme(state.themeMode)) ThemeMode.LIGHT else ThemeMode.DARK) },
                 )
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -206,8 +228,8 @@ private fun App(vm: ScanViewModel) {
                                         selected = tab == t, onClick = { tab = t },
                                         icon = { TabIcon(t, codeCount) }, label = { Text(t.label) },
                                         colors = NavigationRailItemDefaults.colors(
-                                            selectedIconColor = Color(0xFF1C1300), indicatorColor = Palette.Amber,
-                                            selectedTextColor = Palette.Amber, unselectedIconColor = Palette.TextMuted,
+                                            selectedIconColor = Palette.Amber, indicatorColor = Palette.AmberGlow,
+                                            selectedTextColor = Palette.Text, unselectedIconColor = Palette.TextMuted,
                                             unselectedTextColor = Palette.TextMuted,
                                         ),
                                     )
@@ -226,8 +248,8 @@ private fun App(vm: ScanViewModel) {
                                             selected = tab == t, onClick = { tab = t },
                                             icon = { TabIcon(t, codeCount) }, label = { Text(t.label) },
                                             colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = Color(0xFF1C1300), indicatorColor = Palette.Amber,
-                                                selectedTextColor = Palette.Amber, unselectedIconColor = Palette.TextMuted,
+                                                selectedIconColor = Palette.Amber, indicatorColor = Palette.AmberGlow,
+                                                selectedTextColor = Palette.Text, unselectedIconColor = Palette.TextMuted,
                                                 unselectedTextColor = Palette.TextMuted,
                                             ),
                                         )
@@ -259,7 +281,7 @@ private fun TabContent(tab: Tab, state: UiState, vm: ScanViewModel, pickProfile:
         Tab.CODES -> CodesScreen(state, onRead = vm::readCodes, onClear = vm::clearCodes)
         Tab.BUS -> MonitorScreen(state, onStart = vm::startMonitor, onStop = vm::stopMonitor, onSave = vm::saveCapture,
             onOpenReplay = { vm.openReplay(true) })
-        Tab.SETTINGS -> SettingsScreen(state, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenImports = { vm.openImports(true) },
+        Tab.SETTINGS -> SettingsScreen(state, onThemeMode = vm::setThemeMode, onImperial = vm::setImperial, onDisconnect = vm::disconnect, onOpenImports = { vm.openImports(true) },
             onAutoUpdate = vm::setAutoUpdateCheck, onCheckUpdate = { vm.checkForUpdate(manual = true) })
     }
 }

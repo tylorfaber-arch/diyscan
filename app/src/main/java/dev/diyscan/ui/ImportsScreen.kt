@@ -152,7 +152,7 @@ private fun ProfileRow(p: ProfileInfo, onToggle: (String, Boolean) -> Unit, onRe
             }
             Switch(
                 checked = p.enabled, onCheckedChange = { onToggle(p.id, it) },
-                colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Color(0xFF1C1300)),
+                colors = SwitchDefaults.colors(checkedTrackColor = Palette.Amber, checkedThumbColor = Palette.OnAccent),
             )
             Icon(Icons.Filled.Delete, "Remove", tint = Palette.TextMuted,
                 modifier = Modifier.padding(start = 6.dp).clip(CircleShape).clickable { onRemove(p.id) }.padding(8.dp))
